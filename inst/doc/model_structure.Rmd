@@ -1,0 +1,312 @@
+---
+title: "Structure of a gadget3 model"
+output:
+  html_document:
+    toc: true
+vignette: >
+  %\VignetteIndexEntry{Model Structure}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+```{r, message=FALSE, echo=FALSE}
+library(gadget3)
+library(magrittr)
+```
+
+The following describes the structure of a gadget3 model, from the bottom up.
+
+## R formula, or the tilde operator
+
+Crucial to gadget3 is the [R formula](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/formula.html),
+created using the tilde operator (``~``). These get used in several places in R for
+various things, but at their core the tilde operator stores the R code on the
+left and right hand sides, as well as the environment it was created in, which
+amounts to all variables defined at the time.
+
+For example, let's declare a function that produces a formula, and make some:
+
+```{r}
+get_formula <- function (size) {
+    # NB: The reason we make a function here is so we have an isolated environment
+    # to make examples cleaner.
+    cows <- size * 2
+    pigs <- size * 4
+    return(~cows + pigs)
+}
+f <- get_formula(8)
+g <- get_formula(5)
+```
+
+``str()`` shows ``f`` contains the formula's code (not the result of cows + pigs),
+and has an environment attached:
+
+```{r}
+str(f)
+```
+
+We can look into this environment, and see the values that got set for cows & pigs:
+
+```{r}
+str(as.list(environment(f)))
+```
+
+We can do similarly for ``g``, and see the results are different:
+
+```{r}
+str(as.list(environment(g)))
+```
+
+Note that:
+
+* R hasn't at any point worked out ``cows + pigs``, the code was stored for
+  later use.
+* The environment (i.e. all variables defined at that point) is "remembered"
+
+A g3 model at it's core is a list of formula objects that make up the model.
+We can even use Gadget3 to compile our simple example above into an R function:
+
+```{r}
+g3_to_r(list(f))
+```
+
+...or a TMB template:
+
+```{r}
+g3_to_tmb(list(f))
+```
+
+Obviously this in itself isn't a very useful function, but you can see that the
+environment for the formula has provided the initial values for the variables,
+and the code itself has been put into the main loop. 
+
+Also note that, despite appearances, we're not generically converting R into
+C++. There's a subset of R that gadget3 understands and knows how to convert.
+Using R libraries isn't possible, for example. To simplify scoping rules, we
+assume variables are either global, and should have different names, or are
+iterators in loops, in which case they will be local to that loop.
+
+## Actions
+
+In reality you will never be providing formulae to insert into models directly,
+you'd be using the g3 action functions to generate these for you. All action
+functions, prefixed with ``g3a_``, produce a list of formula objects---an
+action in gadget3 parlance. These are where the gadget functionality is
+implemented.
+
+One of the simplest is ``g3a_time``, which produces code that will count
+years/steps, and stop when the end of the time period is reached. For example:
+
+```{r}
+g3a_time(1990, 1999)
+```
+
+Like in the example above, the definitions are part of the formula's
+environment, and if we compile it we see our years ending up in the code.
+
+```{r}
+g3_to_r(g3a_time(1990, 1999))
+```
+
+In this case our years have been hard-coded, but their definitions could
+themselves be formula and the end result will be added to the model. For
+example:
+
+```{r}
+g3_to_r(g3a_time(1990, ~start_year + 4 ))
+```
+
+## Stocks
+
+Beyond ``g3a_time()``, pretty much any action will be describing changes to a
+stock, possibly via. interacting with another stock (or fleet). To keep track
+of this state, we use *g3_stock* objects. These describe several things:
+
+* The dimensions one would use if making an array to store data on that stock.
+For example if we want an array for number of individuals, what lengthgroups do
+we use? How many ages do we store? How many (and which) areas do we have?
+* What code do we need to iterate over the stock? Say I want to add 1
+individual to each lengthgroup, how do I loop over all the other dimensions?
+* If looping over one stock, how do I find corresponding entries in another
+stock? For example, my fleet is only interested in prey that is in the same
+area.
+
+g3_stock objects can be created with either ``g3_stock()`` or ``g3_fleet()``,
+the former will store lengthgroups, which fleets do not have.
+
+Actions will store data about the stocks, for instance the current number of
+individuals, in arrays called stock instances. We can see what sort of arrays a
+stock will make by using ``g3_stock_instance``:
+
+```{r}
+ling_imm <- g3_stock('ling_imm', seq(0, 50, 10))
+g3_stock_instance(ling_imm)
+```
+
+To add complexity to our model, we can use other ``g3s_`` functions, such as
+``g3s_livesonareas()`` or ``g3s_age()``, which adds area or age dimensions to a
+stock:
+
+```{r}
+ling_imm <- g3_stock('ling_imm', seq(0, 50, 10)) %>%
+    g3s_age(3, 10)
+g3_stock_instance(ling_imm)
+```
+
+```{r}
+ling_imm <- g3_stock('ling_imm', seq(0, 50, 10)) %>%
+    g3s_livesonareas(c(1,2)) %>%
+    g3s_age(3, 10)
+g3_stock_instance(ling_imm)[,,'age3']
+```
+
+When you use an action such as ``g3a_growmature()``, you provide g3_stock(s) to
+act on, and formula objects to fill in gaps in the code. ``g3a_growmature()`` will
+iterate over all areas/ages the stock has, and apply growth for each length
+group it finds.
+
+``g3a_growmature()`` itself doesn't care about areas or age, it
+just does the same to each. However, the formula you supply can. ``age`` and
+``area`` variables will be set with the current age/area, which you can use
+when writing formula. For example:
+
+```{r}
+fn <- g3_to_r(g3a_growmature(
+    ling_imm,
+    impl_f = g3a_grow_impl_bbinom(
+        delta_len_f = ~age * 10,
+        delta_wgt_f = ~area * 20,
+        beta_f = ~g3_param("ling.bbin"),
+        maxlengthgroupgrowth = 4),
+    transition_f = ~TRUE))
+fn
+```
+
+...you can see our provided formula have been used to calculate
+``ling_imm__growth_l`` and ``ling_imm__growth_w``, and ``age`` and ``area`` are
+available to us thanks to the loops provided by the stock.
+
+We can also define formulas and reference them. Gadget3 will add the
+definitions into the code where appropriate. For example:
+
+```{r}
+custom_delta_l <- ~area * 99
+custom_delta_w <- ~ling_imm__plusdl * 44
+fn <- g3_to_r(g3a_growmature(
+    ling_imm,
+    impl_f = g3a_grow_impl_bbinom(
+        delta_len_f = ~age * custom_delta_l * 10,
+        delta_wgt_f = ~area * custom_delta_w * 20,
+        beta_f = ~g3_param("ling.bbin"),
+        maxlengthgroupgrowth = 4),
+    transition_f = ~TRUE))
+fn
+```
+
+Note that ``custom_delta_l`` is recalculated every loop, since it uses
+``area``, whereas ``custom_delta_w`` is calculated once for the step.
+
+## Model parameterization
+
+In the ``g3a_growmature`` function above, we see a reference to
+``g3_param("ling.bbin")``. The ``g3_param()`` function is pseudo-code that
+specifies the model should accept a parameter at this point. In the R code,
+this has been converted to ``param[["ling.bbin"]]``, so when we call our R
+function, we can provide a value, e.g. ``fn(list(ling.bbin = 6))``. We can also
+use ``g3_param_vector()`` to provide a model with a vector of values.
+See `?g3_param` for more information on this and other functions available to you.
+
+When converting to TMB, there are a lot more options for using the optimisation
+features it offers.
+
+## Combining actions
+
+Any useful model will have multiple actions, so the outputs from the ``g3a_``
+functions need to be combined. To do this, you can pass a list of actions to
+any of the ``g3_to_*`` functions, for example:
+
+```{r}
+ling_model <- g3_to_r(list(
+    g3a_age(ling_imm),
+    g3a_growmature(
+        ling_imm,
+        impl_f = g3a_grow_impl_bbinom(
+            delta_len_f = ~age * 10,
+            delta_wgt_f = ~area * 20,
+            beta_f = ~g3_param("ling.bbin"),
+            maxlengthgroupgrowth = 4)),
+    g3a_time(1990, 1999)))
+```
+
+A useful technique is to break down the actions into separate lists, e.g.
+
+```{r}
+ling_imm_actions <- list(
+    g3a_age(ling_imm),
+    g3a_growmature(
+        ling_imm,
+        impl_f = g3a_grow_impl_bbinom(
+            delta_len_f = ~age * 10,
+            delta_wgt_f = ~area * 20,
+            beta_f = ~g3_param("ling.bbin"),
+            maxlengthgroupgrowth = 4)))
+time_actions <- list(
+    g3a_time(1990, 1999))
+
+ling_model <- g3_to_r(c(ling_imm_actions, time_actions))
+```
+
+Your actions can be combined in any order, the reasons for why are in the next
+section.
+
+## Ordering of actions
+
+Gadget2 has a strict [Order of Calculations](https://gadget-framework.github.io/gadget2/userguide/chap-order.html),
+and re-ordering calculations may well have averse effects. Actions also have
+common steps to perform, for example overstocking for a prey has to be
+calculated, and calculated once, after each fleet has finished harvesting.
+
+To manage this, formulas within an action are labelled with a string, for
+example:
+
+```{r}
+lln <- g3_fleet('lln') %>% g3s_livesonareas(1)
+action <- g3a_predate_fleet(
+        lln,
+        list(ling_imm),
+        suitabilities = list(
+            ling_imm = g3_suitability_exponentiall50(
+                ~g3_param('ling.lln.alpha'),
+                ~g3_param('ling.lln.l50')),
+            ling_mat = g3_suitability_exponentiall50(
+                ~g3_param('ling.lln.alpha'),
+                ~g3_param('ling.lln.l50'))),
+        catchability_f = g3a_predate_catchability_totalfleet(1))
+names(action)
+```
+
+We see each step has a colon-separated name, including the following parts:
+
+* A number corresponding to the order of calculations. If you look at the
+gadget2 user-guide, consumption is step 3. This can be controlled using the
+``run_at`` parameter of ``g3a_predate_fleet()``, or any other action.
+* Another number specifying the order within an action this step should be
+performed.
+* The prey and where relevant the fleet name
+* A hash, that corresponds to the parameters of the
+``g3a_predate_fleet()`` call.
+
+When a G3 model is made, it will sort the combined list of steps by name, and
+remove duplicates by name. This means that:
+
+* Predation will happen at the correct part of the model cycle.
+* Predation steps themselves will be ordered. So all defined predation steps
+will collect their catch (``003:001``) before overconsumption is calculated
+(``003:004``). There's no explict process needed to interleave multiple predation
+actions.
+* The overconsumption co-efficient for ling_imm will only be calculated once,
+regardless of the number of predation actions, since we will remove the
+duplicate versions of this step.
+* Conversely the hash ensures that there are never duplicate versions of the
+main predation step, so could be repated. This is more relevant for renewal,
+where there can be multiple renewal actions working on the same stock.

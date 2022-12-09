@@ -1,0 +1,153 @@
+importFrom("stats", "as.formula", "formula", "dnorm", "lag")
+importFrom("utils", "capture.output", "head", "str", "tail")
+
+# R/aaa_lang.R
+export(g3_native)
+export(g3_global_formula)
+
+# R/aab_env.R
+export(g3_env)
+
+# R/action_age.R
+export(g3a_age)
+
+# R/action_grow.R
+export(g3a_grow_lengthvbsimple)
+export(g3a_grow_weightsimple)
+export(g3a_grow_impl_bbinom)
+export(g3a_growmature)
+
+# R/action_mature.R
+export(g3a_mature_constant)
+export(g3a_mature_continuous)
+export(g3a_mature)
+
+# R/action_migrate.R
+export(g3a_migrate_normalize)
+export(g3a_migrate)
+
+# R/action_naturalmortality.R
+export(g3a_naturalmortality)
+export(g3a_naturalmortality_exp)
+
+# R/action_predate.R
+export(g3a_predate_catchability_totalfleet)
+export(g3a_predate_catchability_numberfleet)
+export(g3a_predate_catchability_linearfleet)
+export(g3a_predate_catchability_effortfleet)
+export(g3a_predate_catchability_quotafleet)
+export(g3a_predate_fleet)
+export(g3a_predate_totalfleet)
+
+# R/action_renewal.R
+export(g3a_renewal_vonb)
+export(g3a_renewal_initabund)
+export(g3a_renewal)
+export(g3a_renewal_normalparam)
+export(g3a_initialconditions)
+export(g3a_initialconditions_normalparam)
+
+# R/action_report.R
+export(g3a_report_stock)
+export(g3a_report_history)
+export(g3a_report_detail)
+
+# R/action_spawn.R
+export(g3a_spawn_recruitment_fecundity)
+export(g3a_spawn_recruitment_simplessb)
+export(g3a_spawn_recruitment_ricker)
+export(g3a_spawn_recruitment_bevertonholt)
+export(g3a_spawn_recruitment_hockeystick)
+export(g3a_spawn)
+
+# R/action_tagging.R
+export(g3a_predate_tagrelease)
+export(g3a_tag_shedding)
+
+# R/action_time.R
+export(g3a_time)
+
+# R/formula_utils.R
+export(g3_formula)
+
+# R/likelihood_distribution.R
+export(g3l_distribution_sumofsquares)
+export(g3l_distribution_multinomial)
+export(g3l_distribution_multivariate)
+export(g3l_distribution_surveyindices_linear)
+export(g3l_distribution_surveyindices_log)
+export(g3l_distribution_sumofsquaredlogratios)
+export(g3l_catchdistribution)
+export(g3l_abundancedistribution)
+
+# R/likelihood_random.R
+export(g3l_random_dnorm)
+export(g3l_random_walk)
+
+# R/likelihood_tagging_ckmr.R
+export(g3l_tagging_ckmr)
+
+# R/likelihood_understocking.R
+export(g3l_understocking)
+
+# R/params.R
+export(g3_parameterized)
+
+# R/run_desc.R
+export(g3_to_desc)
+
+# R/run_r.R
+export(g3_to_r)
+S3method(edit, g3_r)
+
+# R/run_tmb.R
+export(g3_to_tmb)
+export(g3_tmb_adfun)
+S3method(edit, g3_cpp)
+S3method(print, g3_cpp)
+export(g3_tmb_par)
+export(g3_tmb_lower)
+export(g3_tmb_upper)
+export(g3_tmb_parscale)
+export(g3_tmb_relist)
+
+# R/suitability.R
+export(g3_suitability_exponentiall50)
+export(g3_suitability_andersen)
+export(g3_suitability_gamma)
+export(g3_suitability_exponential)
+export(g3_suitability_straightline)
+export(g3_suitability_constant)
+export(g3_suitability_richards)
+
+# R/step.R
+export(g3_step)
+
+# R/stock.R
+export(g3_stock_def)
+export(g3_stock_instance)
+export(g3_stock)
+export(g3_fleet)
+export(g3s_clone)
+S3method(print, g3_stock)
+
+# R/stock_age.R
+export(g3s_age)
+export(g3s_agegroup)
+
+# R/stock_areas.R
+export(g3s_livesonareas)
+export(g3s_areagroup)
+
+# R/stock_tag.R
+export(g3s_tag)
+
+# R/stock_time.R
+export(g3s_time)
+export(g3s_time_convert)
+
+# R/timedata.R
+export(g3_timeareadata)
+
+# R/timevariable.R
+export(g3_timevariable)
