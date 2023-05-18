@@ -3,6 +3,16 @@ library(unittest)
 
 library(gadget3)
 
+capture_warnings <- function(x, full_object = FALSE) {
+    all_warnings <- list()
+    rv <- withCallingHandlers(x, warning = function (w) {
+        all_warnings <<- c(all_warnings, list(w))
+        invokeRestart("muffleWarning")
+    })
+    if (!full_object) all_warnings <- vapply(all_warnings, function (w) w$message, character(1))
+    return(list(rv = rv, warnings = all_warnings))
+}
+
 ok(ut_cmp_error({
     invalid_subset <- array(dim = c(2,2,2))
     g3_to_tmb(list(~{invalid_subset[,g3_idx(1),]}))
@@ -283,6 +293,13 @@ ok_group('g3_param_table', {
             # NB: Not derived yet, only when calling g3_tmb_parscale()
             parscale = as.numeric(c(NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA)),
             stringsAsFactors = FALSE)), "Param table included custom values")
+    ok(ut_cmp_identical(
+        attr(g3_to_tmb(list(~{
+            g3_param_table('moo', expand.grid(cur_year=1990:1994))
+            g3_param('moo.1990')
+            g3_param('oink.2')
+        })), 'parameter_template')$switch,
+        c("moo.1990", "moo.1991", "moo.1992", "moo.1993", "moo.1994", "oink.2")), "Refering to individual parameters doesn't generate duplicate table entries")
 })
 
 ok_group("g3_to_tmb: attr.actions", {
@@ -336,6 +353,13 @@ ok_group("g3_to_tmb: Can use random parameters without resorting to include_rand
             "b",
             NULL)), "env$random: TMB got the random parameters we expected")
 
+        ok(ut_cmp_error({
+            nlminb(g3_tmb_par(param_tbl), model_tmb$fn, model_tmb$gr)
+        }, "\\$par"), "g3_tmb_par: Not allowed in nlminb() call")
+        ok(ut_cmp_error({
+            optim(g3_tmb_par(param_tbl), model_tmb$fn, model_tmb$gr)
+        }, "\\$par"), "g3_tmb_par: Not allowed in optim() call")
+
         res <- suppressWarnings({
             nlminb(model_tmb$par, model_tmb$fn, model_tmb$gr,
                 upper = g3_tmb_upper(param_tbl),
@@ -370,6 +394,8 @@ ok_group("g3_to_tmb: Can use random parameters without resorting to include_rand
 ###############################################################################
 actions <- list()
 expecteds <- new.env(parent = emptyenv())
+expected_warnings_r <- c()
+expected_warnings_tmb <- c()
 params <- list(rv=0)
 
 # Check constants can pass through cleanly
@@ -415,10 +441,10 @@ expecteds$assign_to_2_2 <- array(c(100.1, 200.2, 110.1, 220.2), dim = c(2,2))
 assign_to_2_2a <- array(dim = c(2,2))
 actions <- c(actions, ~{
     comment('assign_to_2_2a')
-    assign_to_2_2a[g3_idx(1),g3_idx(2)] <- 99
-    assign_to_2_2a[g3_idx(2),g3_idx(1)] <- 88
-    assign_to_2_2a[g3_idx(2),g3_idx(2)] <- 0
-    assign_to_2_2a[g3_idx(1),g3_idx(1)] <- 0
+    assign_to_2_2a[[g3_idx(1),g3_idx(2)]] <- 99
+    assign_to_2_2a[[g3_idx(2),g3_idx(1)]] <- 88
+    assign_to_2_2a[[g3_idx(2),g3_idx(2)]] <- 0
+    assign_to_2_2a[[g3_idx(1),g3_idx(1)]] <- 0
     REPORT(assign_to_2_2a)
 })
 expecteds$assign_to_2_2a <- array(c(0, 88, 99, 0), dim = c(2,2))
@@ -513,6 +539,22 @@ actions <- c(actions, ~{
 })
 expecteds$is_nan_output <- 1 + 8
 expecteds$is_finite_output <- 2 + 4
+
+# as.vector() --> .vec()
+as_vector_array <- array(runif(20), dim=c(10, 2))
+as_vector_result1 <- rep(NaN, 10)
+as_vector_result2 <- rep(NaN, 10)
+as_vector_mean <- 0.5
+as_vector_sigma <- 1
+actions <- c(actions, ~{
+    comment('as_vector')
+    as_vector_result1 <- pnorm(as.vector(as_vector_array[,g3_idx(1)]), as_vector_mean, as_vector_sigma)
+    as_vector_result2 <- pnorm(as.vector(as_vector_array[,g3_idx(2)]), as_vector_mean, as_vector_sigma)
+    REPORT(as_vector_result1)
+    REPORT(as_vector_result2)
+})
+expecteds$as_vector_result1 <- pnorm(as_vector_array[,1], as_vector_mean, as_vector_sigma)
+expecteds$as_vector_result2 <- pnorm(as_vector_array[,2], as_vector_mean, as_vector_sigma)
 
 # mean() --> .mean()
 mean_vector <- array(c(1, 2, 88, 99))
@@ -640,18 +682,33 @@ expecteds$sumprod_sum <- sum(sumprod_input)
 expecteds$sumprod_prod <- prod(sumprod_input)
 
 # g3_param_table()
-pt_a <- 2L ; pt_b <- 7L
-param_table_out <- 0
+param_table_out <- array(rep(0, 6))
 actions <- c(actions, ~{
-    pt_a ; pt_b
-    param_table_out <- g3_param_table('param_table', expand.grid(pt_a = 1:2, pt_b = c(8, 7)))
+    for (pt_a in seq(1, 3, by = 1)) for (pt_b in seq(7, 8, by = 1)) {
+        param_table_out[[((pt_a - 1L) * 2L) + (pt_b - 7L) + 1L]] <- g3_param_table('param_table', expand.grid(pt_a = 1:2, pt_b = c(8, 7)))
+    }
     REPORT(param_table_out)
 })
 params[['param_table.1.8']] <- 18
 params[['param_table.1.7']] <- 17
 params[['param_table.2.8']] <- 28
 params[['param_table.2.7']] <- 27
-expecteds$param_table_out <- 27
+expecteds$param_table_out <- array(c(
+    17,
+    18,
+    27,
+    28,
+    NaN,
+    NaN,
+    NULL))
+expected_warnings_r <- c(expected_warnings_r,
+    "No value found in g3_param_table param_table, ifmissing not specified",
+    "No value found in g3_param_table param_table, ifmissing not specified",
+    NULL)
+expected_warnings_tmb <- c(expected_warnings_tmb,
+    "No value found in g3_param_table param_table, ifmissing not specified",
+    "No value found in g3_param_table param_table, ifmissing not specified",
+    NULL)
 
 # g3_param_table(ifmissing)
 param_table_ifmissing_out <- array(c(1,2,3,4,5,6))
@@ -667,6 +724,59 @@ params[['param_table_ifmissing.2']] <- 27
 params[['param_table_ifmissing.3']] <- 47
 params[['param_table_ifmissing.4']] <- 22
 expecteds$param_table_ifmissing_out <- array(c(-1, 27, 47, 22, -1, -1))
+
+# g3_param_table(ifmissing_param)
+param_table_ifmparam_out <- array(c(1,2,3,4,5,6))
+actions <- c(actions, ~{
+    for (ifmparam in seq(1, 6, by = 1)) {
+        param_table_ifmparam_out[[ifmparam]] <- g3_param_table(
+            'param_table_ifmparam',
+            expand.grid(ifmparam = 2:4), ifmissing = g3_param("param_table_ifmparam.missing"))
+    }
+    REPORT(param_table_ifmparam_out)
+})
+params[['param_table_ifmparam.2']] <- floor(runif(1, 100, 200))
+params[['param_table_ifmparam.3']] <- floor(runif(1, 100, 200))
+params[['param_table_ifmparam.4']] <- floor(runif(1, 100, 200))
+params[['param_table_ifmparam.missing']] <- floor(runif(1, 100, 200))
+expecteds$param_table_ifmparam_out <- array(c(
+    params[['param_table_ifmparam.missing']],
+    params[['param_table_ifmparam.2']],
+    params[['param_table_ifmparam.3']],
+    params[['param_table_ifmparam.4']],
+    params[['param_table_ifmparam.missing']],
+    params[['param_table_ifmparam.missing']]))
+
+# g3_param_table(ifmissing_param_table)
+param_table_ifmpartab_out <- array(c(1,2,3,4,5,6,7,8,9))
+actions <- c(actions, ~{
+    for (ifmpartab in seq(1, 3, by = 1)) for (ifmpartab_m in seq(1, 3, by = 1)) {
+        param_table_ifmpartab_out[[((ifmpartab - 1) * 3) + (ifmpartab_m - 1) + 1]] <- g3_param_table(
+            'param_table_ifmpartab',
+            expand.grid(ifmpartab = 2:3), ifmissing = g3_param_table(
+                "param_table_ifmpartab_m",
+                expand.grid(ifmpartab_m = 1:3)))
+    }
+    REPORT(param_table_ifmpartab_out)
+})
+params[['param_table_ifmpartab.2']] <- floor(runif(1, 100, 200))
+params[['param_table_ifmpartab.3']] <- floor(runif(1, 100, 200))
+params[['param_table_ifmpartab_m.1']] <- floor(runif(1, 100, 200))
+params[['param_table_ifmpartab_m.2']] <- floor(runif(1, 100, 200))
+params[['param_table_ifmpartab_m.3']] <- floor(runif(1, 100, 200))
+expecteds$param_table_ifmpartab_out <- array(c(
+    params[['param_table_ifmpartab_m.1']],
+    params[['param_table_ifmpartab_m.2']],
+    params[['param_table_ifmpartab_m.3']],
+
+    params[['param_table_ifmpartab.2']],
+    params[['param_table_ifmpartab.2']],
+    params[['param_table_ifmpartab.2']],
+
+    params[['param_table_ifmpartab.3']],
+    params[['param_table_ifmpartab.3']],
+    params[['param_table_ifmpartab.3']],
+    NULL))
 
 ###############################################################################
 
@@ -689,15 +799,17 @@ if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
 }
 
 # Compare everything we've been told to compare
-result <- model_fn(params)
+result <- capture_warnings(model_fn(params))
 # str(attributes(result), vec.len = 10000)
 for (n in ls(expecteds)) {
     ok(ut_cmp_equal(
-        attr(result, n),
+        attr(result$rv, n),
         expecteds[[n]], tolerance = 1e-6), n)
 }
+ok(ut_cmp_identical(result$warnings, expected_warnings_r), "Warnings from R as expected")
 if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
     param_template <- attr(model_cpp, "parameter_template")
     param_template$value <- params[param_template$switch]
-    gadget3:::ut_tmb_r_compare(model_fn, model_tmb, param_template)
+    generated_warnings <- capture_warnings(gadget3:::ut_tmb_r_compare(model_fn, model_tmb, param_template))$warnings
+    ok(ut_cmp_identical(generated_warnings, c(expected_warnings_r, expected_warnings_tmb)), "Warnings from R+TMB as expected")
 }

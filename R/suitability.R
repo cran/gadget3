@@ -9,13 +9,11 @@ g3_suitability_exponentiall50 <- function (alpha, l50) {
 }
 
 g3_suitability_andersen <- function (p0, p1, p2, p3 = p4, p4, p5 = ~pred_stock__midlen) {
-  # TODO: We need to switch p4 for p3 when log(pred_stock__midlen/p5) - p1 is <= 0
- # if (!identical(p3, p4)) stop("p3 not currently supported")
-  f_substitute(~avoid_zero(p0) + 
-                 avoid_zero(p2) * exp(-(log(avoid_zero_vec(p5/stock__midlen)) - p1)**2/avoid_zero(p4)) * 
-                 bounded_vec(100*(p1 - log(avoid_zero_vec(p5/stock__midlen))),0,1) +
-                 avoid_zero(p2) * exp(-(log(avoid_zero_vec(p5/stock__midlen)) - p1)**2/avoid_zero(p3)) * 
-                 bounded_vec(100*(log(avoid_zero_vec(p5/stock__midlen))) - p1,0,1),
+  f_substitute(~p0 +
+                 avoid_zero(p2) * exp(-(log(avoid_zero_vec(p5/stock__midlen)) - p1)**2/avoid_zero(p3)) *
+                 bounded_vec(1000*(p1 - log(avoid_zero_vec(p5/stock__midlen))),0,1) +
+                 avoid_zero(p2) * exp(-(log(avoid_zero_vec(p5/stock__midlen)) - p1)**2/avoid_zero(p4)) *
+                 bounded_vec(1000*(log(avoid_zero_vec(p5/stock__midlen)) - p1),0,1),
                list(
                  p0 = p0,
                  p1 = p1,
@@ -25,6 +23,31 @@ g3_suitability_andersen <- function (p0, p1, p2, p3 = p4, p4, p5 = ~pred_stock__
                  p5 = p5))
 }
 
+g3_suitability_andersenfleet <- function (
+        p0 = g3_parameterized('andersen.p0', by_stock = by_stock, value = 0,
+                              optimise = FALSE),
+        p1 = g3_parameterized('andersen.p1', by_stock = by_stock, value = log(2)),
+        p2 = g3_parameterized('andersen.p2', by_stock = by_stock, value = 1,
+                              optimise = FALSE),
+        p3 = g3_parameterized('andersen.p3', by_stock = by_stock, value = 0.1,
+                              exponentiate = exponentiate),
+        p4 = g3_parameterized('andersen.p4', by_stock = by_stock, value = 0.1,
+                              exponentiate = exponentiate),
+        p5 = quote( stock__maxmidlen ),
+        by_stock = TRUE,
+        exponentiate = TRUE) {
+    f_substitute(~p0 +
+        p2 * exp(-(log(p5/stock__midlen) - p1)**2/p3) *
+        bounded_vec(1000*(p1 - log(p5/stock__midlen)),0,1) +
+        p2 * exp(-(log(p5/stock__midlen) - p1)**2/p4) *
+        bounded_vec(1000*(log(p5/stock__midlen) - p1),0,1), list(
+            p0 = p0,
+            p1 = p1,
+            p2 = p2,
+            p3 = p3,
+            p4 = p4,
+            p5 = p5))
+}
 
 g3_suitability_gamma <- function(alpha, beta, gamma){
   ## I'm not sure why beta and gamma are not just a single parameter but 

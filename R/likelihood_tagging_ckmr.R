@@ -46,6 +46,7 @@ g3l_tagging_ckmr <- function (
         debug_label("g3l_tagging_ckmr: Gather historical record of spawning / spawned stock")
     })
     for (parent_stock in parent_stocks) {
+        # TODO: f_concatenate won't do what we want here, environment won't be merged, see R/action_mature.R
         step_f <- f_concatenate(list(step_f, g3_step(~{
             if (sum(stock_with(parent_stock, parent_stock__spawningnum)) > 0) {  # i.e. currently in a spawning step. TODO: Safe? Better way?
                 stock_iterate(parent_stock, stock_intersect(modelhist, {
@@ -84,17 +85,17 @@ g3l_tagging_ckmr <- function (
 
         # Iterate over sensible spawning_year / offspring_age / parent_age combinations
         stock_with(modelhist, if (cur_step_final) {
-            for (i in seq(g3_idx(1), g3_idx(ncol(obsdata_pairs)), by = 1)) if (as_integer(obsdata_pairs[g3_idx(1), i]) == cur_year) {
+            for (pairs_idx in seq(g3_idx(1), g3_idx(ncol(obsdata_pairs)), by = 1)) if (as_integer(obsdata_pairs[[g3_idx(1), pairs_idx]]) == cur_year) {
                 g3_with(
-                  parent_age := as_integer(obsdata_pairs[g3_idx(2), i]),
+                  parent_age := as_integer(obsdata_pairs[[g3_idx(2), pairs_idx]]),
                   modelhist__parent_idx := g3_idx(parent_age - modelhist__minage + 1),
-                  offspring_age := as_integer(obsdata_pairs[g3_idx(3), i]),
+                  offspring_age := as_integer(obsdata_pairs[[g3_idx(3), pairs_idx]]),
                   modelhist__offspring_idx := g3_idx(offspring_age - modelhist__minage + 1),
-                  mopairs := as_integer(obsdata_pairs[g3_idx(4), i]),
+                  mopairs := as_integer(obsdata_pairs[[g3_idx(4), pairs_idx]]),
                   # i.e. # spawned per-parent at this time
                   fecundity_of_parents := modelhist__spawned[,modelhist__offspring_idx] / avoid_zero_vec(modelhist__spawning[,modelhist__offspring_idx]),
                   # Convert to a probability using (3.4):-
-                  cur_ckmr_p := (fecundity_of_parents[modelhist__parent_idx] / modelhist__catch[modelhist__parent_idx]) / sum(fecundity_of_parents), {
+                  cur_ckmr_p := (fecundity_of_parents[[modelhist__parent_idx]] / modelhist__catch[[modelhist__parent_idx]]) / sum(fecundity_of_parents), {
                     # Pseudo-likelihood as per (4.1)
                     nll <- nll + (weight) * log((mopairs) * unname(cur_ckmr_p))
                     # TODO: Consider (4.2) here too?

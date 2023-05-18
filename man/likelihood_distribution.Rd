@@ -109,7 +109,7 @@ g3l_distribution_sumofsquaredlogratios(epsilon = 10)
     depending on what columns \var{obs_data} has.
   }
   \item{transform_fs}{
-    A list of dimension name to formula to apply to model data after collating. See examples.
+    A list of dimension name to formula to apply to model data before collating. See examples.
   }
   \item{missing_val}{
     Where there are missing values in the incoming data, value to replace them with.
@@ -430,7 +430,24 @@ more_likelihood_actions <- list(
     fleets = list(lln),
     stocks = list(ling_imm, ling_mat),
     transform_fs = list(age = g3_formula(
-      g3_param_array('reader1matrix', value = diag(5))[modelstock__preage_idx, modelstock__age_idx]
+      g3_param_array('reader1matrix', value = diag(5))[g3_idx(preage), g3_idx(age)]
       )),
+    g3l_distribution_sumofsquares()))
+
+# Apply per-stock age-reading error matrix to model data
+more_likelihood_actions <- list(
+  g3l_catchdistribution(
+    'ldist_lln_readerror',
+    ldist.lln[[1]],
+    fleets = list(lln),
+    stocks = list(ling_imm, ling_mat),
+    transform_fs = list(age = g3_formula(stock_switch(stock,
+      ling_imm = g3_param_array('imm_readermatrix',
+          value = diag(ling_imm__maxage - ling_imm__minage + 1)
+          )[ling_imm__preage_idx, ling_imm__age_idx],
+      ling_mat = g3_param_array('mat_readermatrix',
+          value = diag(ling_mat__maxage - ling_mat__minage + 1)
+          )[ling_mat__preage_idx, ling_mat__age_idx],
+      unused = 0))),
     g3l_distribution_sumofsquares()))
 }

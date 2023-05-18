@@ -254,6 +254,9 @@ cpp_code <- function(in_call, in_envir, indent = "\n    ", statement = FALSE, ex
 
             if (all(cols_defined)) {
                 # Nothing missing, i.e. a value lookup
+                # NB: As a byproduct this masks the fact that vec.col(x) == vec,
+                #     as col() falls back to the useless Eigen definition for vector<Type>.
+                #     To get rid of it, we'd also have to use array<Type> even in 1-dim cases
                 return(paste0(
                     '(',
                     paste(vapply(
@@ -291,21 +294,26 @@ cpp_code <- function(in_call, in_envir, indent = "\n    ", statement = FALSE, ex
     }
 
     if (call_name == '[[') {
-        if (is.symbol(in_call[[3]]) && endsWith(as.character(in_call[[3]]), "_idx")) {
-            # Already 0-based, nothing to do
-            ind <- in_call[[3]]
-        } else if (is.numeric(in_call[[3]])) {
-            # Indices are 0-based, subtract from value
-            ind <- in_call[[3]] - 1
-        } else {
-            # Add a subtract-1 operator
-            ind <- call("-", in_call[[3]], 1L)
-        }
+        # Convert indices into corresponding C code
+        inds <- lapply(tail(in_call, -2), function(x) {
+            if (is.symbol(x) && endsWith(as.character(x), "_idx")) {
+                # Already 0-based, nothing to do
+                ind <- x
+            } else if (is.call(x) && identical(x[[1]], quote(g3_idx))) {
+                # Don't need to do anything to g3_idx calls
+                ind <- x
+            } else if (is.numeric(x)) {
+                # Indices are 0-based, subtract from value
+                ind <- x - 1
+            } else {
+                # Add a subtract-1 operator
+                ind <- call("-", x, 1L)
+            }
+            return(cpp_code(ind, in_envir, next_indent, expecting_int = TRUE))
+        })
         return(paste(
             cpp_code(in_call[[2]], in_envir, next_indent),
-            "(",
-            cpp_code(ind, in_envir, next_indent, expecting_int = TRUE),
-            ")"))
+            "(", paste(inds, collapse=","), ")"))
     }
 
     if (call_name %in% c('break', 'next')) {
@@ -498,6 +506,10 @@ cpp_code <- function(in_call, in_envir, indent = "\n    ", statement = FALSE, ex
             ").", call_name, "()"))
     }
 
+    if (call_name == "as.vector") {
+        return(paste0("(", cpp_code(in_call[[2]], in_envir, next_indent), ").vec()"))
+    }
+
     if (call_name == "length") {
         return(paste0("(", cpp_code(in_call[[2]], in_envir, next_indent), ").size()"))
     }
@@ -637,7 +649,11 @@ g3_to_tmb <- function(actions, trace = FALSE, strict = FALSE, adreport_re = '^$'
         # Rework all g3_param calls
         repl_fn <- function(x) {
             # NB: eval() because -1 won't be a symbol
-            find_arg <- function (arg_name, def) if (arg_name %in% names(x)) eval(x[[arg_name]]) else def
+            find_arg <- function (arg_name, def, do_eval = TRUE) {
+                if (!(arg_name %in% names(x))) return(def)
+                if (do_eval) return(eval(x[[arg_name]], envir = env))
+                return(x[[arg_name]])
+            }
             if ('optimize' %in% names(x)) stop("g3_param() optimise parameter should be spelt with an s")
 
             df_template <- function (name, dims = c(1)) {
@@ -667,7 +683,12 @@ g3_to_tmb <- function(actions, trace = FALSE, strict = FALSE, adreport_re = '^$'
             if (length(x) < 2 || !is.character(x[[2]])) stop("You must supply a name for the g3_param in ", deparse(x))
             param_name <- cpp_escape_varname(x[[2]])
             if (x[[1]] == 'g3_param_table') {
-                ifmissing <- as.numeric(find_arg('ifmissing', NULL))
+                ifmissing <- find_arg('ifmissing', NULL, do_eval = FALSE)
+                if (rlang::is_formula(ifmissing)) stop("Formula ifmissing not supported")  # Should f_substitute for this to work
+                ifmissing <- call_replace(ifmissing,
+                    g3_param_table = repl_fn,
+                    g3_param = repl_fn)
+
                 # NB: We eval, so they can be defined in-formulae
                 df <- eval(x[[3]], envir = env)
 
@@ -676,7 +697,7 @@ g3_to_tmb <- function(actions, trace = FALSE, strict = FALSE, adreport_re = '^$'
                     sub_param_name <- paste0(c(as.character(x[[2]]), df[i,]), collapse = ".")
                     sub_param_tuple <- paste0(df[i,], collapse = ",")
 
-                    scope[[paste0("..param:", sub_param_name)]] <<- structure(
+                    scope[[cpp_escape_varname(sub_param_name)]] <<- structure(
                         sprintf('PARAMETER(%s);', cpp_escape_varname(sub_param_name)),
                         param_template = df_template(sub_param_name))
                     paste0("{std::make_tuple(", sub_param_tuple ,"), &", cpp_escape_varname(sub_param_name), "}")
@@ -688,21 +709,16 @@ g3_to_tmb <- function(actions, trace = FALSE, strict = FALSE, adreport_re = '^$'
                     param_name,
                     paste0("{", paste0(init_data, collapse=", "), "}"))
 
-                if (length(ifmissing) == 1) {
-                    ifmissing_param_name <- paste0(c(as.character(x[[2]]), 'ifmissing'), collapse = ".")
-                    scope[[ifmissing_param_name]] <<- cpp_definition("Type", ifmissing_param_name, cpp_code(ifmissing, env))
-
+                if (!is.null(ifmissing)) {
                     return(call("g3_cpp_asis", paste0(
-                        " *",  # NB: Our lookup is tuples to pointers to Type, dereference
                         "map_extras::at_def(",
                         cpp_escape_varname(x[[2]]), ", ",
                         "std::make_tuple(", paste(names(df), collapse = ","), "), ",
-                        '&', cpp_escape_varname(ifmissing_param_name),
+                        "(Type)(", cpp_code(ifmissing, env), ")",
                         ")")))
                 } else {
                     # Replace function call to dereference list
                     return(call("g3_cpp_asis", paste0(
-                        " *",  # NB: Our lookup is tuples to pointers to Type, dereference
                         "map_extras::at_throw(",
                         cpp_escape_varname(x[[2]]), ", ",
                         "std::make_tuple(", paste(names(df), collapse = ","), "), ",
@@ -879,19 +895,20 @@ Type objective_function<Type>::operator() () {
         out <- c(strsplit("namespace map_extras {
     // at(), but throw (err) if item isn't available
     template<class Type, class KeyType>
-    Type at_throw(std::map<KeyType, Type> map_in, KeyType key_in, std::string err) {
+    Type at_throw(std::map<KeyType, Type*> map_in, KeyType key_in, std::string err) {
             try {
-                return map_in.at(key_in);
+                return *map_in.at(key_in);
             } catch (const std::out_of_range&) {
-                throw std::runtime_error(\"Out of range: \" + err);
+                warning(\"No value found in g3_param_table %s, ifmissing not specified\", err.c_str());
+                return NAN;
             }
     }
 
     // at(), but return def if item isn't available
     template<class Type, class KeyType>
-    Type at_def(std::map<KeyType, Type> map_in, KeyType key_in, Type def) {
+    Type at_def(std::map<KeyType, Type*> map_in, KeyType key_in, Type def) {
             try {
-                return map_in.at(key_in);
+                return *map_in.at(key_in);
             } catch (const std::out_of_range&) {
                 return def;
             }
@@ -1106,7 +1123,16 @@ g3_tmb_bound <- function (parameters, bound, include_random = FALSE) {
     unlist(out)
 }
 # NB: include_random = TRUE so you can do things like obj.fn$report(g3_tmb_par())
-g3_tmb_par <- function (parameters, include_random = TRUE) g3_tmb_bound(parameters, 'value', include_random)
+g3_tmb_par <- function (parameters, include_random = TRUE) {
+    call_stack <- vapply(
+        sys.calls(),
+        function (x) if (is.call(x)) deparse1(x[[1]]) else "",
+        character(1))
+    if (length(intersect(call_stack, c('nlminb', 'optim', 'stats::nlminb', 'stats::optim'))) > 0) {
+        stop("Don't use g3_tmb_par() with nlminb/optim, use obj.fun$par")
+    }
+    g3_tmb_bound(parameters, 'value', include_random)
+}
 # NB: include_random = FALSE as optim()/nlminb() won't expect them
 g3_tmb_lower <- function (parameters) g3_tmb_bound(parameters, 'lower')
 g3_tmb_upper <- function (parameters) g3_tmb_bound(parameters, 'upper')

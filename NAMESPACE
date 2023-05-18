@@ -67,6 +67,9 @@ export(g3a_tag_shedding)
 # R/action_time.R
 export(g3a_time)
 
+# R/eval.R
+export(g3_eval)
+
 # R/formula_utils.R
 export(g3_formula)
 
@@ -114,6 +117,7 @@ export(g3_tmb_relist)
 # R/suitability.R
 export(g3_suitability_exponentiall50)
 export(g3_suitability_andersen)
+export(g3_suitability_andersenfleet)
 export(g3_suitability_gamma)
 export(g3_suitability_exponential)
 export(g3_suitability_straightline)
@@ -124,6 +128,7 @@ export(g3_suitability_richards)
 export(g3_step)
 
 # R/stock.R
+export(g3_is_stock)
 export(g3_stock_def)
 export(g3_stock_instance)
 export(g3_stock)

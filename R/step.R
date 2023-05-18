@@ -245,8 +245,9 @@ g3_step <- function(step_f, recursing = FALSE, orig_env = environment(step_f)) {
                 return(rlang::f_rhs(out_f))
             }
 
-            # Assume source stock is the first in inner_f, probably true(?)
-            source_stock_var <- sub('__.*$', '', all.vars(inner_f)[[1]])
+            # Find first (stock)__(instance)-named var in inner_f, assume that's source stock.
+            source_stock_var <- grep("__", all.vars(inner_f), value = TRUE)
+            source_stock_var <- sub('__.*$', '', source_stock_var[[1]])
             source_stock <- get(source_stock_var, envir = orig_env)
             if (!("length" %in% names(source_stock$dim))) stop("Source stock ", source_stock$name, " has no length, can't resize")
             source_lg <- g3_stock_def(source_stock, 'minlen')
@@ -399,6 +400,14 @@ g3_step <- function(step_f, recursing = FALSE, orig_env = environment(step_f)) {
                 recursing = TRUE, orig_env = orig_env))
             rest <- tail(rest, -1)
 
+            # TODO: Still not sure if this is truly required, I don't seem to need it with
+            # g3_to_tmb(list( g3_step( g3_formula( stock_with(stock, stock_param_table(stock, "peep", expand.grid(cur_year = 100), ifmissing = stock_param_table(stock, 'parp', expand.grid(cur_year = 100)))), stock = g3_stock('imm', 1:10))) ))
+            if (!is.null(rest$ifmissing) && is.language(rest$ifmissing)) {
+                rest$ifmissing <- rlang::f_rhs(g3_step(
+                    call_to_formula(rest$ifmissing, env = as.environment(list())),
+                    recursing = TRUE, orig_env = orig_env))
+            }
+
             # Make a g3_param call with the newly-named param
             as.call(c(list(quote(g3_param_table), param_name, table_defn), rest))
         },
@@ -429,6 +438,9 @@ g3_step <- function(step_f, recursing = FALSE, orig_env = environment(step_f)) {
 # Turn number/stock/string params into a single string indentifying that step
 step_id <- function (...) {
     parts <- vapply(list(...), function (part) {
+        if (is.null(part)) {
+            return("")
+        }
         if (is.numeric(part)) {
             # Number, format with leading zeros
             return(sprintf("%03d", part))
