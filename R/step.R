@@ -261,7 +261,8 @@ g3_step <- function(step_f, recursing = FALSE, orig_env = environment(step_f)) {
             dest_upperlen <- g3_stock_def(stock, 'upperlen')
             if (is.infinite(dest_upperlen)) dest_upperlen <- max(tail(source_lg, 1), tail(dest_lg, 1)) + 1
 
-            if (isTRUE(all.equal(source_lg, dest_lg))) {
+            # NB: The force_vector class stops all.equal() from ignoring int/num
+            if (isTRUE(all.equal(hide_force_vector(source_lg), hide_force_vector(dest_lg)))) {
                 # Source == dest, so no point doing a transform
                 out_f <- inner_f
             } else {
@@ -427,6 +428,8 @@ g3_step <- function(step_f, recursing = FALSE, orig_env = environment(step_f)) {
         if (!recursing) {
             # Add anything that's not a global_formula to this level
             rv <- add_dependent_formula(rv, TRUE)
+            # Run g3_step again to fix up dependents that got added
+            rv <- g3_step(rv, recursing = TRUE, orig_env = orig_env)
             # Neaten output code by collapsing the stack of g3_with()s we made
             rv <- collapse_g3_with(rv)
             rv <- f_optimize(rv)

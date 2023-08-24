@@ -1,7 +1,7 @@
 # Returns formula for lengthvbsimple growth function
 g3a_grow_lengthvbsimple <- function (
         linf_f = g3_parameterized('Linf', by_stock = by_stock),
-        kappa_f = g3_parameterized('K', by_stock = by_stock, scale = 0.001),
+        kappa_f = g3_parameterized('K', by_stock = by_stock),
         by_stock = TRUE) {
     # See src/growthcalc.cc:GrowthCalcH::calcGrowth
     # NB: avoid_zero_vec() converts negative growth into zero-growth, due to
@@ -55,7 +55,8 @@ g3a_grow_weightsimple <- function (
 
 # Returns bbinom growth implementation formulae
 g3a_grow_impl_bbinom <- function (
-        delta_len_f, delta_wgt_f,
+        delta_len_f = g3a_grow_lengthvbsimple(by_stock = by_stock),
+        delta_wgt_f = g3a_grow_weightsimple(by_stock = by_stock),
         beta_f = g3_parameterized('bbin', by_stock = by_stock),
         maxlengthgroupgrowth,
         by_stock = TRUE) {

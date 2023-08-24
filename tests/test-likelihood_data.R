@@ -13,7 +13,8 @@ generate_ld <- function (tbl, all_stocks = list(), all_fleets = list(), ...) {
     # NB: A failed merge would result in repeated instances
     ok(ut_cmp_equal(
         sort(as.numeric(out$number[out$number != 0])),
-        sort(as.numeric(tbl$number))), "number array has all of source data")
+        sort(as.numeric(tbl$number)),
+        deparse_frame = -2), "number array has all of source data")
     return(out)
 }
 
@@ -37,7 +38,7 @@ cmp_array <- function (ar, table_text) {
         stringsAsFactors = FALSE,
         colClasses = c(rep("character", length(dim(ar))), "numeric"),
         text = table_text)
-    ut_cmp_identical(as.data.frame.table(ar, stringsAsFactors = FALSE), tbl)
+    ut_cmp_identical(as.data.frame.table(ar, stringsAsFactors = FALSE), tbl, deparse_frame = -2)
 }
 
 
@@ -142,7 +143,7 @@ ok_group('g3l_likelihood_data:length', {
         "), "Lengths read from data, missing 2000/10 1999/30 filled in with 0")
     ok(ut_cmp_identical(
         ld_minlen(ld),
-        c("1:5" = 1L, "5:10" = 5L, "10:30" = 10L, "30:Inf" = 30L)), "minlen set via. data")
+        c("1:5" = 1, "5:10" = 5, "10:30" = 10, "30:Inf" = 30)), "minlen set via. data")
     ok(ut_cmp_identical(ld_upperlen(ld), Inf), "If we guess from data, open-ended is only sensible option")
 
     ok(ut_cmp_error(generate_ld("
@@ -251,6 +252,50 @@ ok_group('g3l_likelihood_data:length', {
 })
 
 
+ok_group('g3l_likelihood_data:length_factor', {
+    ld <- generate_ld(data.frame(
+        year = 1990,
+        length = cut(c(14, 28, 33, 33), seq(0, 50, by = 10), right = FALSE),
+        stringsAsFactors = TRUE))
+    ok(ut_cmp_identical(
+        ld_minlen(ld),
+        c("0:10" = 0, "10:20" = 10, "20:30" = 20, "30:40" = 30, "40:50" = 40)), "ld_minlen: Not open ended")
+    ok(ut_cmp_identical(ld_upperlen(ld), 50), "ld_upperlen: Not open ended")
+
+    ld <- generate_ld(data.frame(
+        year = 1990,
+        length = cut(c(14, 28, 33, 33), c(seq(0, 50, by = 10), Inf), right = FALSE),
+        stringsAsFactors = TRUE))
+    ok(ut_cmp_identical(
+        ld_minlen(ld),
+        c("0:10" = 0, "10:20" = 10, "20:30" = 20, "30:40" = 30, "40:50" = 40, "50:Inf" = 50)), "ld_minlen: Open ended")
+    ok(ut_cmp_identical(ld_upperlen(ld), Inf), "ld_upperlen: Open ended")
+
+    ok(ut_cmp_error({
+        ld <- generate_ld(data.frame(
+            year = 1990,
+            length = as.factor(c("a", "b", "b", "c")),
+            stringsAsFactors = TRUE))
+    }, "length levels.*a, b, c"), "Unrecognised column format, included levels in error")
+
+    ok(ut_cmp_error({
+        ld <- generate_ld(data.frame(
+            year = 1990,
+            length = cut(c(14, 28, 33, 33), c(seq(0, 50, by = 10), Inf), right = TRUE),
+            stringsAsFactors = TRUE))
+    }, "inclusive-lower.*\\(0,10\\], \\(10,20\\], \\(20,30\\], \\(30,40\\], \\(40,50\\], \\(50,Inf\\]"), "Unrecognised column format, included levels in error")  # ))))
+
+    ok(ut_cmp_error({
+        ld <- generate_ld(data.frame(
+            year = 1990,
+            # ((((
+            length = factor(c("[0,10)", "[20, 40)"), levels = c("[0,10)", "[20, 40)")),
+            stringsAsFactors = TRUE))
+    # ((
+    }, "Gaps in length groups are not supported: \\[0,10\\), \\[20, 40\\)"), "Complained about gaps in length groups")
+})
+
+
 ok_group('g3l_likelihood_data:age', {
     ld <- generate_ld("
         age year number
@@ -302,10 +347,57 @@ ok_group('g3l_likelihood_data:age', {
           0:Inf 4:6 2001 2001.2
           0:Inf 7:10 2001   0.0
         "), "Worked out age dimensions from attributes, filled in missing values")
-    ok(ut_cmp_identical(ld_minages(ld), array(
-        c(x = 1L, y = 4L, z = 7L),
-        dimnames = list(c("1:3", "4:6", "7:10")),
-        dim = 3)), "agegroups using minages from attribute")
+    ok(ut_cmp_identical(
+        ld_minages(ld),
+        gadget3:::force_vector("1:3" = 1L, "4:6" = 4L, "7:10" = 7L)), "agegroups using minages from attribute")
+})
+
+
+ok_group('g3l_likelihood_data:age_factor', {
+    df <- data.frame(
+        year = 1990,
+        age = c(3,3,4,5),
+        number = 1,
+        stringsAsFactors = TRUE)
+    df$age <- cut(df$age, seq(3, 10, by = 1), right = FALSE)
+    df <- aggregate(number ~ year + age, df, sum)
+    ld <- generate_ld(df)
+    ok(cmp_array(ld$number, "
+        length age time Freq
+         0:Inf 3:3 1990    2
+         0:Inf 4:4 1990    1
+         0:Inf 5:5 1990    1
+         0:Inf 6:6 1990    0
+         0:Inf 7:7 1990    0
+         0:Inf 8:8 1990    0
+         0:Inf 9:9 1990    0
+     "), "ld$number: included all single ages")
+
+    ld <- generate_ld(data.frame(
+        year = 1990,
+        age = as.factor(c(3,4,5,8)),
+        stringsAsFactors = TRUE))
+    ok(cmp_array(ld$number, "
+        length age time Freq
+        0:Inf 3:3 1990    1
+        0:Inf 4:4 1990    2
+        0:Inf 5:7 1990    3
+        0:Inf 8:8 1990    4
+     "), "ld$number: can also use integer strings as factors")
+
+    df <- data.frame(
+        year = 1990,
+        age = c(3,3,4,5),
+        number = 1,
+        stringsAsFactors = TRUE)
+    df$age <- cut(df$age, seq(2, 10, by = 4), right = FALSE)
+    df <- aggregate(number ~ year + age, df, sum)
+    ld <- generate_ld(df)
+    ok(cmp_array(ld$number, "
+        length age time Freq
+         0:Inf 2:5 1990    4
+         0:Inf 6:9 1990    0
+     "), "ld$number: Everything grouped into first group, second compared to zero")
 })
 
 
@@ -408,7 +500,7 @@ ok_group('g3l_likelihood_data:tag', {
         "), "Worked out tag dimensions from data")
     ok(ut_cmp_identical(
         g3_stock_def(ld$modelstock, 'tag_ids'),
-        as.array(c(a = 1L, b = 2L, c = 3L))), "stock__tag_ids: Worked out from factor")
+        gadget3:::force_vector(a = 1L, b = 2L, c = 3L)), "stock__tag_ids: Worked out from factor")
 })
 
 ok_group('g3l_likelihood_data:stock', {

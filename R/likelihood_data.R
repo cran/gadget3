@@ -1,3 +1,27 @@
+parse_levels <- function (lvls, var_name) {
+    m <- suppressWarnings(as.numeric(lvls))
+    if (!anyNA(m)) return(data.frame(
+        names = lvls,
+        lower_incl = TRUE,
+        lower_bound = m,
+        upper_bound = c(tail(m, -1), Inf),  # NB: No data about final bound, assume open-ended
+        upper_incl = FALSE,
+        open_ended_upper = TRUE,
+        stringsAsFactors = FALSE))
+
+    m <- regmatches(lvls, regexec('^(\\[|\\()(.*),(.*)(\\]|\\))', lvls))
+    if (all(vapply(m, length, numeric(1)) == 5)) return(data.frame(
+        names = lvls,
+        lower_incl = vapply(m, function (mm) identical(mm[[2]], '['), logical(1)),
+        lower_bound = vapply(m, function (mm) as.numeric(mm[[3]]), numeric(1)),
+        upper_bound = vapply(m, function (mm) as.numeric(mm[[4]]), numeric(1)),
+        upper_incl = vapply(m, function (mm) identical(mm[[5]], ']'), logical(1)),
+        open_ended_upper = is.infinite(as.numeric(tail(m, 1)[[1]][[4]])),
+        stringsAsFactors = FALSE))
+
+    stop("Unknown form of ", var_name, " levels, see ?cut for formatting: ", paste(lvls, collapse = ", "))
+}
+
 g3l_likelihood_data <- function (nll_name, data, missing_val = 0, area_group = NULL, model_history = FALSE, all_stocks = list(), all_fleets = list()) {
     mfdb_min_bound <- function (x) { if (is.null(attr(x, 'min'))) x[[1]] else attr(x, 'min') }
     mfdb_max_bound <- function (x) { if (is.null(attr(x, 'max'))) tail(x, 1) else attr(x, 'max') }
@@ -43,15 +67,25 @@ g3l_likelihood_data <- function (nll_name, data, missing_val = 0, area_group = N
             data$length <- factor(data$length, levels = names(length_groups))
             levels(data$length) <- modelstock$dimnames$length
         } else {
-            length_groups <- sort(unique(data$length))
+            # Force length to be a factor if not already
+            if (!is.factor(data$length)) data$length <- as.factor(data$length)
 
-            # Default to open-ended, as there's no way to specify the maximum
-            modelstock <- g3_stock(paste(nll_name, "model", sep = "_"), length_groups, open_ended = TRUE)
-            # Convert length data to use our naming
-            data$length <- factor(
-                data$length,
-                levels = length_groups,
-                labels = modelstock$dimnames$length)
+            lvls <- parse_levels(levels(data$length), "length")
+            open_ended_upper <- lvls$open_ended_upper[[1]]
+
+            length_vec <- if (open_ended_upper) lvls$lower_bound else c(lvls$lower_bound, tail(lvls$upper_bound, 1))
+
+            if (any(!lvls$lower_incl) || any(lvls$upper_incl)) {
+                stop("length intervals should be inclusive-lower, i.e. cut(..., right=FALSE): ", paste(lvls$names, collapse = ", "))
+            }
+            if (!isTRUE(all.equal(tail(lvls$lower_bound, -1), head(lvls$upper_bound, -1)))) {
+                stop("Gaps in length groups are not supported: ", paste(lvls$names, collapse = ", "))
+            }
+
+            modelstock <- g3_stock(paste(nll_name, "model", sep = "_"), length_vec, open_ended = open_ended_upper)
+
+            # Convert data$length to use our naming
+            levels(data$length) <- modelstock$dimnames$length
         }
         handled_columns$length <- NULL
     } else {
@@ -70,6 +104,24 @@ g3l_likelihood_data <- function (nll_name, data, missing_val = 0, area_group = N
 
             # Convert data$age to use our naming
             data$age <- factor(data$age, levels = names(age_groups))
+            levels(data$age) <- modelstock$dimnames$age
+        } else if (is.factor(data$age)) {
+            lvls <- parse_levels(levels(data$age), "age")
+
+            if (is.infinite(tail(lvls$upper_bound, 1))) {
+                # No support for infinite upper bound, bodge
+                lvls$upper_bound[[length(lvls$upper_bound)]] <-
+                    lvls$lower_bound[[length(lvls$lower_bound)]] +
+                    1  # NB: It's not going to be upper-inclusive, so will subtract one at next step
+            }
+
+            # Account for lower_incl / upper_incl
+            lvls$lower_bound <- ifelse(!lvls$lower_incl, lvls$lower_bound + 1, lvls$lower_bound)
+            lvls$upper_bound <- ifelse(!lvls$upper_incl, lvls$upper_bound - 1, lvls$upper_bound)
+            age_groups <- lapply(seq_len(nrow(lvls)), function (i) seq(lvls[i, "lower_bound"], lvls[i, "upper_bound"]))
+            # NB: We never set the original names on age_groups
+
+            modelstock <- g3s_agegroup(modelstock, age_groups)
             levels(data$age) <- modelstock$dimnames$age
         } else {
             age_groups <- seq(min(data$age), max(data$age))

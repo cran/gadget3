@@ -132,12 +132,6 @@ g3_to_r <- function(actions, trace = FALSE, strict = FALSE) {
                 # Recurse, to resolve any g3_param() calls.
                 var_val_code <- var_defns(var_val, env)
                 defn <- call("<-", as.symbol(var_name), var_val_code)
-            } else if (inherits(var_val, 'sparseMatrix') && Matrix::nnzero(var_val) == 0) {
-                # Define empty sparseMatrix
-                defn <- call(
-                    "<-",
-                    as.symbol(var_name),
-                    substitute(Matrix::sparseMatrix(dims = x, x=numeric(0), i={}, j={}), list(x = dim(var_val))))
             } else if (is.array(var_val) && ( length(var_val) < 2 || all(is.na(var_val)) || all(var_val == var_val[[1]]) )) {
                 # Define dimensions for all-equal array
 
@@ -151,10 +145,10 @@ g3_to_r <- function(actions, trace = FALSE, strict = FALSE) {
                     y = if (!is.null(attr(var_val, 'dynamic_dimnames'))) as.call(c(as.symbol("list"), attr(var_val, 'dynamic_dimnames'))) else to_call(dimnames(var_val)))))
             } else if ((is.numeric(var_val) || is.character(var_val) || is.logical(var_val)) && length(var_val) == 1) {
                 # Add single-value literal to code
-                defn <- call("<-", as.symbol(var_name), to_call(var_val))
+                defn <- call("<-", as.symbol(var_name), to_call(hide_force_vector(var_val)))
             } else {
                 # Bung in model_env, no need to define
-                assign(var_name, var_val, envir = model_env)
+                assign(var_name, hide_force_vector(var_val), envir = model_env)
             }
             if (!identical(defn, logical(0))) scope[[var_name]] <<- defn
         }

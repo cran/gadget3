@@ -158,8 +158,7 @@ tmb_param$value$project_years <- 0
 tmb_param$value$ling.init.F <- 0.4
 tmb_param$value$ling.Linf <- 160
 tmb_param$value$ling.K <- 90
-tmb_param$value$ling.recl <- 12
-tmb_param$recage <- g3_stock_def(ling_imm, 'minage')
+tmb_param$value$ling.t0 <- 0
 tmb_param[grepl('^ling.init.sd.', rownames(tmb_param)), 'value'] <- 50.527220
 tmb_param[grepl('^ling_imm.init.\\\\d+', rownames(tmb_param)), 'value'] <- 1
 tmb_param$value$ling_imm.init.scalar <- 200
@@ -178,8 +177,23 @@ tmb_param['parscale'] <- 1
 # Compile to a TMB ADFun
 tmb <- g3_tmb_adfun(cpp, tmb_param)
 
-# Build the model in an isolated R session w/debugger
-writeLines(TMB::gdbsource(g3_tmb_adfun(cpp, compile_flags = "-g", output_script = TRUE)))
+# NB: TMB::gdbsource() requires both "R" and "gdb" to be available
+# NB: gdbsource hangs on windows - https://github.com/kaskr/adcomp/issues/385
+if (all(nzchar(Sys.which(c('gdb', 'R')))) && .Platform$OS.type !="windows") {
+
+  cpp_broken <- g3_to_tmb(list(
+    initialconditions_action,
+    abundance_action,
+    g3_formula(quote( stop("This model is broken") )),
+    time_action))
+
+  # Build the model in an isolated R session w/debugger
+  writeLines(TMB::gdbsource(g3_tmb_adfun(
+      cpp_broken,
+      compile_flags = "-g",
+      output_script = TRUE)))
+
+}
 
 # Perform a single run, using values in table
 result <- tmb$fn(g3_tmb_par(tmb_param))

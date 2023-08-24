@@ -355,11 +355,6 @@ cpp_code <- function(in_call, in_envir, indent = "\n    ", statement = FALSE, ex
         to_matrix <- function (x) {
             inner <- cpp_code(x, in_envir, next_indent)
             if (is.symbol(x)) {
-                # If we're multiplying a symbol already defined as a sparse matrix, no need for .matrix()
-                env_defn <- mget(as.character(x), envir = in_envir, inherits = TRUE, ifnotfound = list(NA))[[1]]
-                if (inherits(env_defn, 'sparseMatrix')) {
-                    return(inner)
-                }
                 return(paste0(inner, '.matrix()'))
             }
             return(paste0('(', inner, ').matrix()'))
@@ -369,17 +364,10 @@ cpp_code <- function(in_call, in_envir, indent = "\n    ", statement = FALSE, ex
 
     if (call_name == "*") {
         # Element-wise multiplication
-        if (is.symbol(in_call[[2]])) {
-            env_defn <- mget(as.character(in_call[[2]]), envir = in_envir, inherits = TRUE, ifnotfound = list(NA))[[1]]
-            if (inherits(env_defn, 'sparseMatrix')) {
-                stop("Don't know how to do cwiseProduct for sparse matrix ", in_call[[2]])
-            }
-            # NB: Would use .cwiseProduct() for dense matrices
-        }
         return(paste0(
-            cpp_code(in_call[[2]], in_envir, next_indent),
+            cpp_code(in_call[[2]], in_envir, expecting_int = expecting_int, next_indent),
             "*",
-            cpp_code(in_call[[3]], in_envir, next_indent)))
+            cpp_code(in_call[[3]], in_envir, expecting_int = expecting_int, next_indent)))
     }
 
     if (call_name == "pmin") {
@@ -452,7 +440,7 @@ cpp_code <- function(in_call, in_envir, indent = "\n    ", statement = FALSE, ex
 
         if (call_name == "-" && length(in_call) == 2) {
             # Negative numeral, e.g.
-            return(paste0("-", cpp_code(in_call[[2]], in_envir, next_indent)))
+            return(paste0("-", cpp_code(in_call[[2]], in_envir, expecting_int = expecting_int, next_indent)))
         }
         return(paste(
             cpp_code(in_call[[2]], in_envir, next_indent, expecting_int = expecting_int),
@@ -461,7 +449,7 @@ cpp_code <- function(in_call, in_envir, indent = "\n    ", statement = FALSE, ex
     }
 
     if (call_name == "(") {
-        return(paste0("(", cpp_code(in_call[[2]], in_envir, next_indent), ")"))
+        return(paste0("(", cpp_code(in_call[[2]], in_envir, expecting_int = expecting_int, next_indent), ")"))
     }
 
     if (call_name %in% c("is.nan")) {
@@ -535,14 +523,14 @@ cpp_code <- function(in_call, in_envir, indent = "\n    ", statement = FALSE, ex
         return(paste0("(", cpp_code(in_call[[2]], in_envir, next_indent), ").prod()"))
     }
 
-    if (call_name %in% c("colSums", "Matrix::colSums")) {
+    if (call_name %in% c("colSums")) {
         # NB: colwise/rowwise only works on matrices, working directly on TMB::arrays would work on 1-dimensional array, which is useless
-        return(paste0("(vector<Type>)((", cpp_code(in_call[[2]], in_envir, next_indent), ").matrix().colwise().sum())"))
+        return(paste0("(", cpp_code(in_call[[2]], in_envir, next_indent), ").matrix().colwise().sum()"))
     }
 
-    if (call_name %in% c("rowSums", "Matrix::rowSums")) {
+    if (call_name %in% c("rowSums")) {
         # NB: colwise/rowwise only works on matrices, working directly on TMB::arrays would work on 1-dimensional array, which is useless
-        return(paste0("(vector<Type>)((", cpp_code(in_call[[2]], in_envir, next_indent), ").matrix().rowwise().sum())"))
+        return(paste0("(", cpp_code(in_call[[2]], in_envir, next_indent), ").matrix().rowwise().sum()"))
     }
 
     if (call_name == "rep" && (is.null(names(in_call)[[3]]) || names(in_call)[[3]] == 'times')) {
@@ -790,21 +778,34 @@ g3_to_tmb <- function(actions, trace = FALSE, strict = FALSE, adreport_re = '^$'
                 }
             } else if (is.call(var_val)) {
                 defn <- cpp_definition('auto', var_name, cpp_code(var_val, env))
-            } else if (inherits(var_val, 'sparseMatrix') && Matrix::nnzero(var_val) == 0) {
-                # Define empty sparseMatrix
-                defn <- cpp_definition(
-                    'Eigen::SparseMatrix<Type>',
-                    dims = dim(var_val))
-            } else if (is.array(var_val) && ( length(var_val) < 2 || all(is.na(var_val)) || all(var_val == var_val[[1]]) )) {
-                if (length(dim(var_val)) == 1) {
-                    # NB: vector isn't just an alias, more goodies are available to the vector class
-                    cpp_type <- 'vector'
+            } else {
+                # Decide base type
+                if (all(is.integer(var_val))) {
+                    cpp_type <- 'int'
+                } else if (all(is.numeric(var_val)) || all(is.na(var_val))) {
+                    # NB: array(NA) isn't numeric, but that's what we probably want
+                    cpp_type <- 'Type'
+                } else if (all(is.logical(var_val))) {
+                    # NB: bool -> int, as array<bool> doesn't REPORT() (tests/test-action_time.R, R/test_utils.R)
+                    cpp_type <- 'int'
                 } else {
-                    # NB: Otherwise array. We only use matrix<> when we know we want matrix multiplication
-                    cpp_type <- 'array'
+                    stop("Don't know how to define ", var_name, " = ", paste(capture.output(str(var_val)), collapse = "\n    "))
                 }
-                cpp_type <- paste0(cpp_type, if (is.integer(var_val)) '<int>' else '<Type>')
-                if (all(dim(var_val) == 0)) {
+                if (is.array(var_val)) {
+                    cpp_type <- paste0('array<', cpp_type, '>')
+                } else if (is_force_vector(var_val)) {
+                    cpp_type <- paste0('vector<', cpp_type, '>')
+                }
+
+                # Add dimensions
+                if (!grepl('<', cpp_type, fixed = TRUE)) {
+                    # Scalar
+                    defn <- cpp_definition(cpp_type, var_name)
+                } else if (is.null(dim(var_val))) {
+                    # Vector
+                    defn <- cpp_definition(cpp_type, var_name, dims = length(var_val))
+                } else if (all(dim(var_val) == 0)) {
+                    # Zero-dimensioned array
                     defn <- cpp_definition(cpp_type, var_name)
                 } else if (!is.null(attr(var_val, 'dynamic_dim'))) {
                     # Define flexible dimensions
@@ -824,41 +825,31 @@ g3_to_tmb <- function(actions, trace = FALSE, strict = FALSE, adreport_re = '^$'
                         var_name,
                         dims = dim(var_val))
                 }
-                if (length(var_val) < 1 || is.na(var_val[[1]])) {
-                    # Value is NA, so leave uninitialized
-                } else if (var_val[[1]] == 0) {
+
+                # Initialize value
+                if ( length(var_val) < 1 || all(is.na(var_val) & !is.nan(var_val)) ) {
+                    # Zero-length or NA, so leave uninitialized
+                } else if (!grepl('<', cpp_type, fixed = TRUE)) {
+                    # Add initialisation to scalars
+                    defn <- cpp_definition(cpp_type, var_name, cpp_code(var_val, env))
+                } else if ( all(is.nan(var_val)) ) {
+                    # Init all-NaN vector (saving is.finite tests later)
+                    defn <- paste0(defn, " ", cpp_escape_varname(var_name), ".setConstant(NAN);")
+                } else if (any(var_val != var_val[[1]])) {
+                    # Store array in model_data
+                    defn <- paste0(
+                        c('vector<Type>' = 'DATA_VECTOR', 'vector<int>' = 'DATA_IVECTOR',
+                          'array<Type>' = 'DATA_ARRAY', 'array<int>' = 'DATA_IARRAY')[[cpp_type]],
+                        '(', cpp_escape_varname(var_name) , ')')
+                    assign(cpp_escape_varname(var_name), hide_force_vector(var_val), envir = model_data)
+                } else if (is.numeric(var_val[[1]]) && var_val[[1]] == 0) {  # NB: FALSE == 0
                     defn <- paste0(defn, " ", cpp_escape_varname(var_name), ".setZero();")
                 } else {
                     defn <- paste0(defn, " ", cpp_escape_varname(var_name), ".setConstant(", cpp_code(var_val[[1]], env),");")
                 }
-            } else if (is.array(var_val) && length(dim(var_val)) > 1) {
-                # Store array in model_data
-                defn <- paste0('DATA_ARRAY(', cpp_escape_varname(var_name) , ')')
-                assign(cpp_escape_varname(var_name), var_val, envir = model_data)
-            } else if (is.numeric(var_val) || is.character(var_val) || is.logical(var_val)) {
-                if (is.integer(var_val)) {
-                    cpp_type <- 'int'
-                } else if (is.numeric(var_val)) {
-                    cpp_type <- 'Type'
-                } else {
-                    cpp_type <- 'auto'
-                }
-                if (length(var_val) > 1 || is.array(var_val)) {
-                    # Store in DATA
-                    if (cpp_type == 'int') {
-                        defn <- paste0('DATA_IVECTOR(', cpp_escape_varname(var_name) , ')')
-                    } else {
-                        defn <- paste0('DATA_VECTOR(', cpp_escape_varname(var_name) , ')')
-                    }
-                    assign(cpp_escape_varname(var_name), var_val, envir = model_data)
-                } else {
-                    # Define as a literal
-                    defn <- cpp_definition(cpp_type, var_name, cpp_code(var_val, env))
-                }
-            } else {
-                stop("Don't know how to define ", var_name, " = ", paste(capture.output(str(var_val)), collapse = "\n    "))
             }
 
+            attr(defn, 'report_names') <- names(var_val)
             attr(defn, 'report_dimnames') <- dimnames(var_val)
             attr(defn, 'report_dynamic_dimnames') <- attr(var_val, 'dynamic_dimnames')
             scope[[var_name]] <<- defn
@@ -925,6 +916,7 @@ Type objective_function<Type>::operator() () {
     attr(out, 'model_data') <- model_data
     attr(out, 'parameter_template') <- scope_to_parameter_template(scope, 'data.frame')
     attr(out, 'report_renames') <- scope_to_cppnamemap(scope)
+    attr(out, 'report_names') <- Filter(Negate(is.null), lapply(scope, function (x) attr(x, 'report_names')))
     attr(out, 'report_dimnames') <- Filter(Negate(is.null), lapply(scope, function (x) attr(x, 'report_dimnames')))
     attr(out, 'report_dynamic_dimnames') <- Filter(Negate(is.null), lapply(scope, function (x) attr(x, 'report_dynamic_dimnames')))
     return(out)
@@ -1010,7 +1002,10 @@ g3_tmb_adfun <- function(cpp_code,
 
     # Name cpp code based on content, so we will recompile/reload if code edit()ed
     # NB: as.character() strips attributes, so only use the code to define our digest
-    base_name <- paste0('g3_tmb_', digest::sha1(as.character(cpp_code)))
+    base_name <- paste0('g3_tmb_', digest::sha1(paste0(
+        as.character(cpp_code),
+        as.character(compile_flags),
+        collapse = "")))
     cpp_path <- paste0(file.path(work_dir, base_name), '.cpp')
     so_path <- TMB::dynlib(file.path(work_dir, base_name))
 
@@ -1063,6 +1058,7 @@ g3_tmb_adfun <- function(cpp_code,
         DLL = base_name,
         ...)
 
+    report_names <- attr(cpp_code, 'report_names')
     report_dimnames <- attr(cpp_code, 'report_dimnames')
     report_renames <- attr(cpp_code, 'report_renames')
     report_dynamic_dimnames <- attr(cpp_code, 'report_dynamic_dimnames')
@@ -1075,6 +1071,12 @@ g3_tmb_adfun <- function(cpp_code,
 
             out[[report_renames[[dimname]]]] <- out[[dimname]]
             out[[dimname]] <- NULL
+        }
+
+        # Patch vector names back again
+        for (dimname in names(report_names)) {
+            if (!(dimname %in% names(out))) next
+            names(out[[dimname]]) <- report_names[[dimname]]
         }
 
         # Patch report dimensions back again
