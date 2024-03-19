@@ -3,7 +3,7 @@ g3l_understocking <- function (
         power_f = ~2,
         nll_breakdown = FALSE,
         weight = 1e+08,
-        run_at = 10) {
+        run_at = g3_action_order$likelihood) {
     out <- new.env(parent = emptyenv())
 
     nllstock <- g3_storage("nll_understocking")
@@ -44,6 +44,10 @@ g3l_understocking <- function (
     }, list(
         power_f = power_f,
         weight = weight)))
-        
-    return(as.list(out))
+
+    return(c(as.list(out), g3a_report_var(
+        "nllstock__wgt",
+        nllstock__wgt,
+        stock = nllstock,
+        out_prefix = NULL )))  # Don't add history
 }

@@ -1,14 +1,18 @@
 # Suitability functions all return a formula containing the following variables
 # * stock__midlen
-# * pred_stock__midlen
+# * predstock__midlen
 
-g3_suitability_exponentiall50 <- function (alpha, l50) {
+g3_suitability_exponentiall50 <- function (
+    alpha = g3_parameterized("alpha", by_stock = by_stock, by_predator = by_predator),
+    l50 = g3_parameterized("l50", by_stock = by_stock, by_predator = by_predator),
+    by_stock = TRUE,
+    by_predator = TRUE) {
   f_substitute(~1 / ( 1 + exp(-alpha * (stock__midlen - l50)) ), list(
     alpha = alpha,
     l50 = l50))
 }
 
-g3_suitability_andersen <- function (p0, p1, p2, p3 = p4, p4, p5 = ~pred_stock__midlen) {
+g3_suitability_andersen <- function (p0, p1, p2, p3 = p4, p4, p5 = ~predstock__midlen) {
   f_substitute(~p0 +
                  avoid_zero(p2) * exp(-(log(avoid_zero_vec(p5/stock__midlen)) - p1)**2/avoid_zero(p3)) *
                  bounded_vec(1000*(p1 - log(avoid_zero_vec(p5/stock__midlen))),0,1) +
@@ -24,17 +28,19 @@ g3_suitability_andersen <- function (p0, p1, p2, p3 = p4, p4, p5 = ~pred_stock__
 }
 
 g3_suitability_andersenfleet <- function (
-        p0 = g3_parameterized('andersen.p0', by_stock = by_stock, value = 0,
-                              optimise = FALSE),
-        p1 = g3_parameterized('andersen.p1', by_stock = by_stock, value = log(2)),
-        p2 = g3_parameterized('andersen.p2', by_stock = by_stock, value = 1,
-                              optimise = FALSE),
-        p3 = g3_parameterized('andersen.p3', by_stock = by_stock, value = 0.1,
-                              exponentiate = exponentiate),
-        p4 = g3_parameterized('andersen.p4', by_stock = by_stock, value = 0.1,
-                              exponentiate = exponentiate),
+        p0 = g3_parameterized('andersen.p0', value = 0, optimise = FALSE,
+                              by_stock = by_stock),
+        p1 = g3_parameterized('andersen.p1', value = log(2),
+                              by_stock = by_stock, by_predator = by_predator),
+        p2 = g3_parameterized('andersen.p2', value = 1, optimise = FALSE,
+                              by_stock = by_stock),
+        p3 = g3_parameterized('andersen.p3', value = 0.1, exponentiate = exponentiate,
+                              by_stock = by_stock, by_predator = by_predator),
+        p4 = g3_parameterized('andersen.p4', value = 0.1, exponentiate = exponentiate,
+                              by_stock = by_stock, by_predator = by_predator),
         p5 = quote( stock__maxmidlen ),
         by_stock = TRUE,
+        by_predator = TRUE,
         exponentiate = TRUE) {
     f_substitute(~p0 +
         p2 * exp(-(log(p5/stock__midlen) - p1)**2/p3) *
@@ -59,7 +65,7 @@ g3_suitability_gamma <- function(alpha, beta, gamma){
 }
 
 g3_suitability_exponential <- function (alpha, beta, gamma, delta) {
-  f_substitute(~delta / ( 1 + exp(-alpha - beta * stock__midlen - gamma * pred_stock__midlen)) , list(
+  f_substitute(~delta / ( 1 + exp(-alpha - beta * stock__midlen - gamma * predstock__midlen)) , list(
     alpha = alpha,
     beta = beta,
     gamma = gamma,

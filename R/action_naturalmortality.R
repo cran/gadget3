@@ -1,7 +1,6 @@
 g3a_naturalmortality_exp <- function (
-        param_f = g3_parameterized('M', by_stock = by_stock, by_age = by_age),
+        param_f = g3_parameterized('M', by_stock = by_stock, by_age = TRUE),
         by_stock = TRUE,
-        by_age = FALSE,
         action_step_size_f = ~cur_step_size) {
     f_substitute(
         ~exp(-(param_f) * action_step_size_f),
@@ -12,7 +11,7 @@ g3a_naturalmortality <- function (
         stock,
         mortality_f = g3a_naturalmortality_exp(),
         run_f = TRUE,
-        run_at = 4) {
+        run_at = g3_action_order$naturalmortality) {
     # See Stock::reducePop, NaturalMortality::Reset
     out <- new.env(parent = emptyenv())
     action_name <- unique_action_name()

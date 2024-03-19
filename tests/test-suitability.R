@@ -4,7 +4,7 @@ library(unittest)
 library(gadget3)
 
 # Mini action to run suitability function for stocks and report output
-suit_report_action <- function (pred_stock, stock, suit_f, run_at = 99) {
+suit_report_action <- function (predstock, stock, suit_f, run_at = 99) {
     out <- new.env(parent = emptyenv())
     suit_fn_name <- as.character(sys.call()[[4]][[1]])
     suit_var_name <- paste0('stock__', suit_fn_name)
@@ -12,7 +12,7 @@ suit_report_action <- function (pred_stock, stock, suit_f, run_at = 99) {
     
     out[[gadget3:::step_id(run_at, suit_fn_name)]] <- gadget3:::g3_step(gadget3:::f_substitute(~{
         debug_label("Testing ", suit_fn_name)
-        stock_iterate(stock, stock_intersect(pred_stock, {
+        stock_iterate(stock, stock_intersect(predstock, {
             stock_ss(suit_var) <- (suit_f)
         }))
         stock_with(stock, REPORT(suit_var))
@@ -22,6 +22,25 @@ suit_report_action <- function (pred_stock, stock, suit_f, run_at = 99) {
         suit_f = suit_f)))
     return(as.list(out))
 }
+
+ok_group("g3_suitability_exponentiall50", {
+    fleet_stock <- g3_fleet(c(country = "is", "comm"))
+    input_stock <- g3_stock(c(species = "ling", "imm"), c(10, 20, 30, 40, 50, 75, 100))
+
+    action <- suit_report_action(fleet_stock, input_stock, g3_suitability_exponentiall50())
+    param_names <- attr(g3_to_tmb(list(action)), 'parameter_template')$switch
+    ok(ut_cmp_identical(param_names, c(
+        "ling_imm.is_comm.alpha",
+        "ling_imm.is_comm.l50",
+        NULL)), "g3_suitability_exponentiall50: Used fleet names by default")
+
+    action <- suit_report_action(fleet_stock, input_stock, g3_suitability_exponentiall50(by_predator = 'country', by_stock = 'species'))
+    param_names <- attr(g3_to_tmb(list(action)), 'parameter_template')$switch
+    ok(ut_cmp_identical(param_names, c(
+        "ling.is.alpha",
+        "ling.is.l50",
+        NULL)), "g3_suitability_exponentiall50: Can customise with by_predator switches")
+})
 
 ok_group("g3_suitability_andersen", {
     nondiff_andersen <- function (p0, p1, p2, p3 = p4, p4, p5, stock__midlen) {
@@ -42,15 +61,15 @@ ok_group("g3_suitability_andersenfleet", {
     nondiff_andersenfleet <- function (
             lg,
             param.fish.andersen.p0 = 0,
-            param.fish.andersen.p1 = log(2),
+            param.fish.pred.andersen.p1 = log(2),
             param.fish.andersen.p2 = 1,
-            param.fish.andersen.p3_exp = 0.1,
-            param.fish.andersen.p4_exp = 0.1) {
+            param.fish.pred.andersen.p3_exp = 0.1,
+            param.fish.pred.andersen.p4_exp = 0.1) {
         p0 <- param.fish.andersen.p0
-        p1 <- param.fish.andersen.p1
+        p1 <- param.fish.pred.andersen.p1
         p2 <- param.fish.andersen.p2
-        p3 <- exp(param.fish.andersen.p3_exp)
-        p4 <- exp(param.fish.andersen.p4_exp)
+        p3 <- exp(param.fish.pred.andersen.p3_exp)
+        p4 <- exp(param.fish.pred.andersen.p4_exp)
         # Work out open-ended midlen, use maximum for p5
         dl <- diff(lg) / 2 ; dl <- c(dl, dl[[length(dl)]])
         stock__midlen <- lg + dl
@@ -65,6 +84,7 @@ ok_group("g3_suitability_andersenfleet", {
         g3_eval(
             g3_suitability_andersenfleet(),
             stock=g3_stock('fish', lg),
+            predstock=g3_fleet('pred'),
             ...)
     }
 
@@ -73,12 +93,12 @@ ok_group("g3_suitability_andersenfleet", {
         as.numeric(do.call(g3_andersenfleet, params)),
         do.call(nondiff_andersenfleet, params),
         tolerance = 1e-6), paste0("g3_suitability_andersen matches ", deparse1(params)))
-    params <- list(lg = seq(100, 500, by = 100), param.fish.andersen.p3_exp = -Inf)
+    params <- list(lg = seq(100, 500, by = 100), param.fish.pred.andersen.p3_exp = -Inf)
     ok(ut_cmp_equal(
         as.numeric(do.call(g3_andersenfleet, params)),
         do.call(nondiff_andersenfleet, params),
         tolerance = 1e-6), paste0("g3_suitability_andersen matches ", deparse1(params)))
-    params <- list(lg = seq(100, 500, by = 100), param.fish.andersen.p4_exp = 0.999)
+    params <- list(lg = seq(100, 500, by = 100), param.fish.pred.andersen.p4_exp = 0.999)
     ok(ut_cmp_equal(
         as.numeric(do.call(g3_andersenfleet, params)),
         do.call(nondiff_andersenfleet, params),

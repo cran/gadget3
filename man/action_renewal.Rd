@@ -5,8 +5,11 @@
 \alias{g3a_renewal_initabund}
 \alias{g3a_initialconditions}
 \alias{g3a_initialconditions_normalparam}
+\alias{g3a_initialconditions_normalcv}
 \alias{g3a_renewal}
 \alias{g3a_renewal_normalparam}
+\alias{g3a_renewal_normalcv}
+\concept{G3 action}
 
 \title{Gadget3 renewal actions}
 \description{
@@ -30,14 +33,15 @@ g3a_renewal_vonb_t0(
 g3a_renewal_initabund(
     scalar = g3_parameterized('init.scalar', value = 1, by_stock = by_stock),
     init = g3_parameterized('init', value = 1, by_stock = by_stock, by_age = TRUE),
-    M = g3_parameterized('M', by_stock = by_stock),
+    M = g3_parameterized('M', by_stock = by_stock, by_age = TRUE),
     init_F = g3_parameterized('init.F', by_stock = by_stock_f),
     recage = g3_parameterized('recage', by_stock = FALSE, optimise = FALSE),
     proportion_f = ~1,
     by_stock = TRUE,
     by_stock_f = FALSE)
 
-g3a_initialconditions(stock, num_f, wgt_f, run_f = ~cur_time == 0L, run_at = 0)
+g3a_initialconditions(stock, num_f, wgt_f, run_f = ~cur_time == 0L,
+        run_at = g3_action_order$initial)
 
 g3a_initialconditions_normalparam(
         stock,
@@ -52,9 +56,25 @@ g3a_initialconditions_normalparam(
         by_age = FALSE,
         wgt_by_stock = TRUE,
         run_f = ~cur_time == 0L,
-        run_at = 0)
+        run_at = g3_action_order$initial)
 
-g3a_renewal(stock, num_f, wgt_f, run_f = ~TRUE, run_at = 8)
+g3a_initialconditions_normalcv(
+        stock,
+        factor_f = g3a_renewal_initabund(by_stock = by_stock),
+        mean_f = g3a_renewal_vonb_t0(by_stock = by_stock),
+        cv_f = g3_parameterized('lencv', by_stock = by_stock, value = 0.1,
+            optimise = FALSE),
+        alpha_f = g3_parameterized('walpha', by_stock = wgt_by_stock),
+        beta_f = g3_parameterized('wbeta', by_stock = wgt_by_stock),
+        age_offset = quote( cur_step_size ),
+        by_stock = TRUE,
+        by_age = FALSE,
+        wgt_by_stock = TRUE,
+        run_f = ~cur_time == 0L,
+        run_at = g3_action_order$initial)
+
+g3a_renewal(stock, num_f, wgt_f, run_f = ~TRUE,
+        run_at = g3_action_order$renewal)
 
 g3a_renewal_normalparam(
         stock,
@@ -75,8 +95,29 @@ g3a_renewal_normalparam(
         run_projection = FALSE,
         run_step = 1,
         run_f = NULL,
-        run_at = 8)
+        run_at = g3_action_order$renewal)
 
+g3a_renewal_normalcv(
+        stock,
+        factor_f = g3_parameterized('rec',
+            by_stock = by_stock,
+            by_year = TRUE,
+            scale = g3_parameterized(
+                name = 'rec.scalar',
+                by_stock = by_stock),
+            ifmissing = NaN),
+        mean_f = g3a_renewal_vonb_t0(by_stock = by_stock),
+        cv_f = g3_parameterized('lencv', by_stock = by_stock, value = 0.1,
+            optimise = FALSE),
+        alpha_f = g3_parameterized('walpha', by_stock = wgt_by_stock),
+        beta_f = g3_parameterized('wbeta', by_stock = wgt_by_stock),
+        by_stock = TRUE,
+        wgt_by_stock = TRUE,
+        run_age = quote(stock__minage),
+        run_projection = FALSE,
+        run_step = 1,
+        run_f = NULL,
+        run_at = g3_action_order$renewal)
 }
 
 \arguments{
@@ -90,22 +131,13 @@ g3a_renewal_normalparam(
     \link{formula} that produces a lenghgroup vector of mean weight for the current age/area/... length group.
   }
   \item{run_at}{
-    Integer order that actions will be run within model, see "Ordering of actions" in \code{vignette("model_structure")}.
+    Integer order that actions will be run within model, see \code{\link{g3_action_order}}.
   }
-  \item{factor_f}{
+  \item{factor_f,mean_f,stddev_f,alpha_f,beta_f}{
     \link{formula} substituted into normalparam calcuations, see below.
   }
-  \item{mean_f}{
-    \link{formula} substituted into normalparam calcuations, see below.
-  }
-  \item{stddev_f}{
-    \link{formula} substituted into normalparam calcuations, see below.
-  }
-  \item{alpha_f}{
-    \link{formula} substituted into normalparam calcuations, see below.
-  }
-  \item{beta_f}{
-    \link{formula} substituted into normalparam calcuations, see below.
+  \item{cv_f}{
+    \link{formula} substituted into normalcv calcuations, basically \code{stddev_f = mean_f * cv_f}, see below.
   }
   \item{age_offset}{
     Replace \code{age} with \code{age - age_offset} in \var{mean_f}. Used to simulate initialconditions at time "-1".
@@ -118,20 +150,10 @@ g3a_renewal_normalparam(
     For initialconditions defaults to first timestep.
     For renewal, the default is a combination of \var{run_age}, \var{run_step} & \var{run_projection}.
   }
-  \item{Linf}{\link{formula} substituted into vonb calcuations, see below.}
-  \item{K}{\link{formula} substituted into vonb calcuations, see below.}
-  \item{t0}{\link{formula} substituted into vonb calcuations, see below.}
-  \item{recl}{\link{formula} substituted into vonb calcuations, see below.}
+  \item{Linf,K,t0,recl}{\link{formula} substituted into vonb calcuations, see below.}
   \item{recage}{\link{formula} substituted into initial abundance and vonb calcuations, see below.}
-  \item{proportion_f}{\link{formula} substituted into initial abundance calcuations, see below.}
-  \item{scalar}{\link{formula} substituted into initial abundance calcuations, see below.}
-  \item{init}{\link{formula} substituted into initial abundance calcuations, see below.}
-  \item{M}{\link{formula} substituted into initial abundance calcuations, see below.}
-  \item{init_F}{\link{formula} substituted into initial abundance calcuations, see below.}
-  \item{by_stock}{Controls how parameters are grouped, see \code{\link{g3_parameterized}}}
-  \item{wgt_by_stock}{Controls how parameters are grouped, see \code{\link{g3_parameterized}}}
-  \item{by_stock_f}{Controls how parameters are grouped, see \code{\link{g3_parameterized}}}
-  \item{by_age}{Controls how parameters are grouped, see \code{\link{g3_parameterized}}}
+  \item{proportion_f,scalar,init,M,init_F}{\link{formula} substituted into initial abundance calcuations, see below.}
+  \item{by_stock,wgt_by_stock,by_stock_f,by_age}{Controls how parameters are grouped, see \code{\link{g3_parameterized}}}
 }
 
 \details{
@@ -200,6 +222,21 @@ g3a_renewal_normalparam(
       \item{\eqn{\beta}}{Substituted for \var{beta_f}}
     }
   }
+  \subsection{g3a_initialconditions_normalcv / g3a_renewal_normalcv}{
+    As \link{g3a_initialconditions} / \link{g3a_renewal}, but the following formulae are used to calculate num/wgt:
+
+    \deqn{n = e^{-(\frac{L - \mu}{\mu * {CV}})^2 / 2}}
+    \deqn{N = F 10000 \frac{n}{\sum n}}
+    \deqn{W = \alpha L^{\beta}}
+    \describe{
+      \item{\eqn{L}}{Midlength of length groups for current area/age/...}
+      \item{\eqn{F}}{Substituted for \var{factor_f}}
+      \item{\eqn{\mu}}{Substituted for \var{mean_f}}
+      \item{\eqn{CV}}{Substituted for \var{cv_f}}
+      \item{\eqn{\alpha}}{Substituted for \var{alpha_f}}
+      \item{\eqn{\beta}}{Substituted for \var{beta_f}}
+    }
+  }
 }
 
 \seealso{
@@ -218,4 +255,23 @@ initialconditions_action <- g3a_initialconditions_normalparam(
 renewal_action <- g3a_renewal_normalparam(
     ling_imm,
     run_step = 2)  # Renewal happens in spring
+
+# To get a single ling_imm.lencv parameter instead of init.sd
+initialconditions_action <- g3a_initialconditions_normalcv(
+    ling_imm)
+renewal_action <- g3a_renewal_normalcv(
+    ling_imm,
+    run_step = 2)  # Renewal happens in spring
+
+## Plots
+par(mar = c(4,2,2,1), cex.main = 1)
+curve(g3_eval(g3a_renewal_vonb_t0(Linf = 20, K = 0.8, t0 = 0), age = x),
+    0, 10, col = 2, xlab = "age", main = "g3a_renewal_vonb_t0(Linf = 20, K = 0.8..1.4, t0 = 0)")
+curve(g3_eval(g3a_renewal_vonb_t0(Linf = 20, K = 1.0, t0 = 0), age = x),
+    0, 10, col = 1, add = TRUE)
+curve(g3_eval(g3a_renewal_vonb_t0(Linf = 20, K = 1.2, t0 = 0), age = x),
+    0, 10, col = 3, add = TRUE)
+curve(g3_eval(g3a_renewal_vonb_t0(Linf = 20, K = 1.4, t0 = 0), age = x),
+    0, 10, col = 4, add = TRUE)
+
 }

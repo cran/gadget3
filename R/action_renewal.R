@@ -36,7 +36,7 @@ g3a_renewal_vonb <- g3a_renewal_vonb_recl  # NB: Default to _recl for backwards-
 g3a_renewal_initabund <- function(
     scalar = g3_parameterized('init.scalar', value = 1, by_stock = by_stock),
     init = g3_parameterized('init', value = 1, by_stock = by_stock, by_age = TRUE),
-    M = g3_parameterized('M', by_stock = by_stock),
+    M = g3_parameterized('M', by_stock = by_stock, by_age = TRUE),
     init_F = g3_parameterized('init.F', by_stock = by_stock_f),
     recage = g3_parameterized('recage', by_stock = FALSE, optimise = FALSE),
     proportion_f = ~1,
@@ -81,7 +81,7 @@ g3a_renewal_wgt_wl <- function(
 }
 
 # Assign number / mean weight based on formulae
-g3a_initialconditions <- function (stock, num_f, wgt_f, run_f = ~cur_time == 0L, run_at = 0) {
+g3a_initialconditions <- function (stock, num_f, wgt_f, run_f = ~cur_time == 0L, run_at = g3_action_order$initial) {
     stock__num <- g3_stock_instance(stock, 0)
     stock__wgt <- g3_stock_instance(stock, 1)
 
@@ -115,12 +115,13 @@ g3a_initialconditions_normalparam <- function (
         by_age = FALSE,
         wgt_by_stock = TRUE,
         run_f = ~cur_time == 0L,
-        run_at = 0) {
+        run_at = g3_action_order$initial) {
 
     # Replace "age" with "age - cur_step_size", i.e. pretending this is happening at time "-1"
     if (!is.null(age_offset)) {
         age_offset <- f_substitute(quote(age - age_offset), list(age_offset = age_offset))
         mean_f <- f_substitute(mean_f, list(age = age_offset))
+        stddev_f <- f_substitute(stddev_f, list(age = age_offset))
     }
 
     # NB: Generate action name with our arguments
@@ -135,8 +136,35 @@ g3a_initialconditions_normalparam <- function (
     return(out)
 }
 
+# normalparam, but with a cv_f instead of stddev_f
+g3a_initialconditions_normalcv <- function (
+        stock,
+        factor_f = g3a_renewal_initabund(by_stock = by_stock),
+        mean_f = g3a_renewal_vonb_t0(by_stock = by_stock),
+        cv_f = g3_parameterized('lencv', by_stock = by_stock, value = 0.1,
+            optimise = FALSE),
+        alpha_f = g3_parameterized('walpha', by_stock = wgt_by_stock),
+        beta_f = g3_parameterized('wbeta', by_stock = wgt_by_stock),
+        age_offset = quote( cur_step_size ),
+        by_stock = TRUE,
+        by_age = FALSE,
+        wgt_by_stock = TRUE,
+        run_f = ~cur_time == 0L,
+        run_at = g3_action_order$initial) {
+    g3a_initialconditions_normalparam(
+        stock = stock,
+        factor_f = factor_f,
+        mean_f = mean_f,
+        stddev_f = f_substitute(quote(mean_f * cv_f), list(mean_f = mean_f, cv_f = cv_f)),
+        alpha_f = alpha_f,
+        beta_f = beta_f,
+        age_offset = age_offset,
+        run_f = run_f,
+        run_at = run_at)
+}
+
 # Assign number / mean weight based on formulae
-g3a_renewal <- function (stock, num_f, wgt_f, run_f = ~TRUE, run_at = 8) {
+g3a_renewal <- function (stock, num_f, wgt_f, run_f = ~TRUE, run_at = g3_action_order$renewal) {
     # See InitialCond::Initialise
     stock__num <- g3_stock_instance(stock, 0)
     stock__wgt <- g3_stock_instance(stock, 1)
@@ -184,7 +212,7 @@ g3a_renewal_normalparam <- function (
         run_projection = FALSE,
         run_step = 1,
         run_f = NULL,
-        run_at = 8) {
+        run_at = g3_action_order$renewal) {
 
     if (is.null(run_f)) run_f <- f_substitute(quote( age && step && proj ), list(
         age = (if (is.null(run_age)) TRUE else f_substitute(quote(age == x), list(x = run_age))),
@@ -202,4 +230,42 @@ g3a_renewal_normalparam <- function (
         run_f = run_f,
         run_at = run_at)[[1]]
     return(out)
+}
+
+# normalparam, but with a cv_f instead of stddev_f
+g3a_renewal_normalcv <- function (
+        stock,
+        factor_f = g3_parameterized('rec',
+            by_stock = by_stock,
+            by_year = TRUE,
+            scale = g3_parameterized(
+                name = 'rec.scalar',
+                by_stock = by_stock),
+            ifmissing = NaN),
+        mean_f = g3a_renewal_vonb_t0(by_stock = by_stock),
+        cv_f = g3_parameterized('lencv', by_stock = by_stock, value = 0.1,
+            optimise = FALSE),
+        alpha_f = g3_parameterized('walpha', by_stock = wgt_by_stock),
+        beta_f = g3_parameterized('wbeta', by_stock = wgt_by_stock),
+        by_stock = TRUE,
+        wgt_by_stock = TRUE,
+        run_age = quote(stock__minage),
+        run_projection = FALSE,
+        run_step = 1,
+        run_f = NULL,
+        run_at = g3_action_order$renewal) {
+    g3a_renewal_normalparam(
+        stock,
+        factor_f = factor_f,
+        mean_f = mean_f,
+        stddev_f = f_substitute(quote(mean_f * cv_f), list(mean_f = mean_f, cv_f = cv_f)),
+        alpha_f = alpha_f,
+        beta_f = beta_f,
+        by_stock = by_stock,
+        wgt_by_stock = wgt_by_stock,
+        run_age = run_age,
+        run_projection = run_projection,
+        run_step = run_step,
+        run_f = run_f,
+        run_at = run_at)
 }

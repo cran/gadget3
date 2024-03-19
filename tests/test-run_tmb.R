@@ -56,6 +56,15 @@ ok(ut_cmp_error({
     g3_to_tmb(list(~g3_param("camel", optimize = FALSE)))
 }, "optimise"), "Optimise is spelt with an s in g3_param()")
 
+ok_group("Exponentiate params")
+params.in <- attr(g3_to_tmb(list( g3a_time(1990, 2000), g3_formula(
+    quote(d),
+    d = g3_parameterized('par.years', value = 0, by_year = TRUE, exponentiate = TRUE),
+    x = NA) )), 'parameter_template')
+ok(ut_cmp_identical(params.in[grep('^par', params.in$switch), 'switch'], c(
+    paste0('par.years.', 1990:2000, '_exp'),
+    NULL)), "exponentiate prefix ends up at the end of parameters")
+
 ok_group('g3_tmb_par', {
     param <- attr(g3_to_tmb(list(~{
         g3_param('param.b')
@@ -328,15 +337,15 @@ ok_group("g3_to_tmb: Can use random parameters without resorting to include_rand
             g3l_random_dnorm("a",
                 ~g3_param('a', value=1, random=TRUE),
                 ~g3_param('mu.a', value=1),
-                ~g3_param('sigma.a', value=1)),
+                ~g3_param('sigma.a', value=1), period="single"),
             g3l_random_dnorm("b",
                 ~g3_param('b', value=1, random=TRUE),
                 ~g3_param('mu.b', value=1),
-                ~g3_param('sigma.b', value=1)),
+                ~g3_param('sigma.b', value=1), period="single"),
             g3l_random_dnorm("x",
                 ~x,
                 ~g3_param('a', value=1, random=TRUE) * t + g3_param('b', value=1, random=TRUE),
-                ~g3_param('sigma0', value=1)))
+                ~g3_param('sigma0', value=1), period="single" ))
     })
     model_fn <- g3_to_r(actions)
 
@@ -546,6 +555,7 @@ is_nan_finite_array_input <- as.array(1:4)
 is_nan_nan_array_input <- as.array(rep(NaN, 5))
 is_nan_finite_vector_input <- 1:4
 is_nan_nan_vector_input <- rep(NaN, 5)
+is_nan_finite_single_array_input <- as.array(1)
 is_nan_output <- 0L
 is_finite_output <- 0L
 actions <- c(actions, ~{
@@ -555,16 +565,18 @@ actions <- c(actions, ~{
     is_nan_output <- is_nan_output + (if (any(is.nan(is_nan_finite_array_input))) 4 else 0)
     is_nan_output <- is_nan_output + (if (any(is.nan(is_nan_nan_array_input))) 8 else 0)
     is_nan_output <- is_nan_output + (if (any(is.nan(is_nan_nan_vector_input))) 16 else 0)
+    is_nan_output <- is_nan_output + (if (any(is.nan(is_nan_finite_single_array_input))) 32 else 0)
     REPORT(is_nan_output)
     is_finite_output <- is_finite_output + (if (is.finite(is_nan_nan_scalar_input)) 1 else 0)
     is_finite_output <- is_finite_output + (if (is.finite(is_nan_finite_scalar_input)) 2 else 0)
     is_finite_output <- is_finite_output + (if (any(is.finite(is_nan_finite_array_input))) 4 else 0)
     is_finite_output <- is_finite_output + (if (any(is.finite(is_nan_nan_array_input))) 8 else 0)
     is_finite_output <- is_finite_output + (if (any(is.finite(is_nan_nan_vector_input))) 16 else 0)
+    is_finite_output <- is_finite_output + (if (any(is.finite(is_nan_finite_single_array_input))) 32 else 0)
     REPORT(is_finite_output)
 })
 expecteds$is_nan_output <- 1 + 8 + 16
-expecteds$is_finite_output <- 2 + 4
+expecteds$is_finite_output <- 2 + 4 + 32
 
 # as.vector() --> .vec()
 as_vector_array <- array(runif(20), dim=c(10, 2))

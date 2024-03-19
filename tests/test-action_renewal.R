@@ -10,28 +10,29 @@ cmp_formula <- function (a, b) {
 
     out <- ut_cmp_identical(rlang::f_rhs(a), rlang::f_rhs(b))
     if (!identical(out, TRUE)) return(out)
-    return(ut_cmp_identical(ordered_list(environment(a)), ordered_list(environment(b))))
+    out <- ut_cmp_identical(ordered_list(environment(a)), ordered_list(environment(b)))
+    return(out)
 }
 
 library(gadget3)
 
 ok_group('g3a_renewal_vonb_recl', {
     ok(cmp_formula(g3a_renewal_vonb_recl(), g3_formula(
-        stock_param(stock, "Linf", name_part = NULL, value = 1) * (1 - exp(-1 *
-            stock_param(stock, "K", name_part = NULL, value = 1) *
+        stock_prepend(stock, g3_param("Linf", value = 1), name_part = NULL) * (1 - exp(-1 *
+            stock_prepend(stock, g3_param("K", value = 1), name_part = NULL) *
             (age - (g3_param("recage", optimise = FALSE) + 
-                      log(1 - stock_param(stock, "recl", name_part = NULL) /
-                stock_param(stock, "Linf", name_part = NULL, value = 1)) /
-                stock_param(stock, "K", name_part = NULL, value = 1)))))
+                      log(1 - stock_prepend(stock, g3_param("recl"), name_part = NULL) /
+                stock_prepend(stock, g3_param("Linf", value = 1), name_part = NULL)) /
+                stock_prepend(stock, g3_param("K", value = 1), name_part = NULL)))))
             )), "Default params by stock")
 
     ok(cmp_formula(g3a_renewal_vonb_recl(by_stock = "species"), g3_formula(
-        stock_param(stock, "Linf", name_part = "species", value = 1) * (1 - exp(-1 *
-            stock_param(stock, "K", name_part = "species", value = 1) *
+        stock_prepend(stock, g3_param("Linf", value = 1), name_part = "species") * (1 - exp(-1 *
+            stock_prepend(stock, g3_param("K", value = 1), name_part = "species") *
             (age - (g3_param("recage", optimise = FALSE) + 
-                      log(1 - stock_param(stock, "recl", name_part = "species") /
-                stock_param(stock, "Linf", name_part = "species", value = 1)) /
-                stock_param(stock, "K", name_part = "species", value = 1)))))
+                      log(1 - stock_prepend(stock, g3_param("recl"), name_part = "species") /
+                stock_prepend(stock, g3_param("Linf", value = 1), name_part = "species")) /
+                stock_prepend(stock, g3_param("K", value = 1), name_part = "species")))))
             )), "by_stock works for all default params")
 
     ok(cmp_formula(g3a_renewal_vonb_recl(Linf = 'Linf', K = g3_formula( x * 2, x = 10), recl = 'recl', recage = 'recage'), 
@@ -42,19 +43,19 @@ ok_group('g3a_renewal_vonb_recl', {
 
 ok_group('g3a_renewal_vonb_t0', {
     ok(cmp_formula(g3a_renewal_vonb_t0(), g3_formula(
-        stock_param(stock, "Linf", name_part = NULL, value = 1) * (1 -
-            exp(-1 * stock_param(stock, "K", name_part = NULL, value = 1) *
-                (age - stock_param(stock, "t0", name_part = NULL) )))
+        stock_prepend(stock, g3_param("Linf", value = 1), name_part = NULL) * (1 -
+            exp(-1 * stock_prepend(stock, g3_param("K", value = 1), name_part = NULL) *
+                (age - stock_prepend(stock, g3_param("t0"), name_part = NULL) )))
             )), "Default params by stock")
 
     ok(cmp_formula(g3a_renewal_vonb_t0(by_stock = "species"), g3_formula(
-        stock_param(stock, "Linf", name_part = "species", value = 1) *
-            (1 - exp(-1 * stock_param(stock, "K", name_part = "species",
-                value = 1) * (age - stock_param(stock, "t0", name_part = "species"))))
+        stock_prepend(stock, g3_param("Linf", value = 1), name_part = "species") *
+            (1 - exp(-1 * stock_prepend(stock, g3_param("K",
+                value = 1), name_part = "species") * (age - stock_prepend(stock, g3_param("t0"), name_part = "species"))))
             )), "by_stock works for all default params")
 
     ok(cmp_formula(g3a_renewal_vonb_t0(Linf = 'Linf', K = g3_formula( x * 2, x = 10)), g3_formula(
-        "Linf" * (1 - exp(-1 * (x * 2) * (age - stock_param(stock, "t0", name_part = NULL))
+        "Linf" * (1 - exp(-1 * (x * 2) * (age - stock_prepend(stock, g3_param("t0"), name_part = NULL))
         )), x = 10)), "Can override with values, formulas")
 })
 
@@ -142,8 +143,48 @@ ok_group('g3a_initialconditions_normalparam:age_offset', {
     ok(cmp_formula(out_f, g3_formula(quote(
         (fish__midlen - (m_f + age - 4))/stddev)
     )), "mean_f = m_f + age - 4, disabled age_offset")
+
+    out_f <- extract_dnorm(g3a_initialconditions_normalcv(
+        fish,
+        mean_f = quote(m_f + age)))
+    ok(cmp_formula(out_f, g3_formula(quote(
+        (fish__midlen - (m_f + (age - cur_step_size)))
+          /
+        ((m_f + (age - cur_step_size)) * g3_param("fish.lencv", value = 0.1, optimise = FALSE))
+    ))), "normalcv: Replaced age in both mean_f & stddev_f")
 })
 
+ok_group('g3a_initialconditions_cv', {
+    extract_dnorm <- function (renewal_f, var_sym = as.symbol("dnorm")) {
+        for (f in gadget3:::f_find(renewal_f[[1]], ":=")) {
+            if (f[[2]] == var_sym) return(f[[3]])
+        }
+        stop("Could not find ", var_sym)
+    }
+    fish <- g3s_age(g3_stock('fish', seq(20, 156, 4)), 3, 10)
+
+    ok(cmp_formula(extract_dnorm(g3a_initialconditions_normalparam(fish)), g3_formula(quote(
+        (fish__midlen - (g3_param("fish.Linf", value = 1) * (1 - exp(-1 *
+            g3_param("fish.K", value = 1) * ((age - cur_step_size) - g3_param("fish.t0"))))))
+        / g3_param("fish.init.sd", value = 10)
+    ))), "g3a_initialconditions_normalparam default")
+
+    ok(cmp_formula(extract_dnorm(g3a_initialconditions_normalcv(fish)), g3_formula(quote(
+        (fish__midlen - (g3_param("fish.Linf", value = 1) * (1 - exp(-1 *
+            g3_param("fish.K", value = 1) * ((age - cur_step_size) - g3_param("fish.t0"))))))
+        / (
+          (g3_param("fish.Linf", value = 1) * (1 - exp(-1 * g3_param("fish.K", value = 1) * ((age - cur_step_size) - g3_param("fish.t0"))))) *
+          g3_param("fish.lencv", value = 0.1, optimise = FALSE))
+    ))), "g3a_initialconditions_normalcv default")
+
+    ok(cmp_formula(extract_dnorm(g3a_renewal_normalcv(fish)), g3_formula(quote(
+        (fish__midlen - (g3_param("fish.Linf", value = 1) * (1 - exp(-1 *
+            g3_param("fish.K", value = 1) * (age - g3_param("fish.t0"))))))
+        / (
+          (g3_param("fish.Linf", value = 1) * (1 - exp(-1 * g3_param("fish.K", value = 1) * (age - g3_param("fish.t0"))))) *
+          g3_param("fish.lencv", value = 0.1, optimise = FALSE))
+    ))), "g3a_renewal_normalcv default")
+})
 
 areas <- list(a=1, b=2, c=3, d=4)
 stock_a <- g3_stock('stock_a', seq(10, 10, 5)) %>% g3s_livesonareas(areas[c('a')])

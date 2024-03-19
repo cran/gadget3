@@ -20,12 +20,72 @@ ok_group('edit.g3_r - Round-trip through an editor results in working code', {
     ok(ut_cmp_identical(n, model_fn_n(list(nll = n))), "Edited function works too")
 })
 
+ok_group('print.g3_r', {
+    cap <- function (x) {
+        out <- capture.output(x)
+        out[grepl("^<", out)] <- "<>"
+        return(out)
+    }
+    model_fn <- g3_to_r(list( g3_formula(
+        return(x + sum(y)),
+        y = c(4, 5),
+        x = g3_parameterized('parp') )))
+    ok(ut_cmp_identical(cap(print(model_fn)), c(
+        "function (param) ",
+        "{",
+        "    cur_time <- -1L",
+        "    stopifnot(\"parp\" %in% names(param))",
+        "    x <- param[[\"parp\"]]",
+        "    while (TRUE) {",
+        "        cur_time <- cur_time + 1L",
+        "        return(x + sum(y))",
+        "    }",
+        "}",
+        "<>",
+        "<>",
+        NULL)), "Default print output has code, no attributes")
+    ok(ut_cmp_identical(cap(print(model_fn, with_environment = TRUE, with_template = TRUE)), c(
+        "function (param) ",
+        "{",
+        "    cur_time <- -1L",
+        "    stopifnot(\"parp\" %in% names(param))",
+        "    x <- param[[\"parp\"]]",
+        "    while (TRUE) {",
+        "        cur_time <- cur_time + 1L",
+        "        return(x + sum(y))",
+        "    }",
+        "}",
+        "<>",
+        "<>",
+        "Environment:",
+        " $ y                : num [1:2] 4 5",
+        " $ reporting_enabled: int 1",
+        "Parameter template:",
+        " $ parp: num 0",
+        NULL)), "Can add with_environment = TRUE, with_template = TRUE")
+})
+
 ok_group("g3_to_r: attr.actions", {
     actions <- list(
         list("001" = ~{ 1 + 1 }, "002" = ~{2 + 2}),
         "003" = ~{3 + 3})
     model_fn <- g3_to_r(actions)
     ok(ut_cmp_identical(attr(model_fn, 'actions'), actions), "actions returned as attribute uncollated")
+})
+
+ok_group("g3_to_r: attr.parameter_template", {
+    actions <- list(
+        list("001" = ~{ 1 + 1 }, "002" = ~{2 + 2}),
+        "003" = ~{3 + 3})
+    model_fn <- g3_to_r(actions)
+    ok(ut_cmp_identical(attr(model_fn, 'parameter_template'), NULL), "Empty parameter template")
+
+    actions <- list(
+        "001" = ~{ 1 + 1 },
+        "002" = ~{g3_param('moo', value = 4) + g3_param('oink', value = 99)},
+        "003" = ~{3 + 3})
+    model_fn <- g3_to_r(actions)
+    ok(ut_cmp_identical(attr(model_fn, 'parameter_template'), list(moo = 4, oink = 99)), "2 values populated")
 })
 
 ok_group('g3_param', {
@@ -64,4 +124,12 @@ ok_group('g3_param_table', {
                 paste('pt', 2000:2004, 3, sep = '.'),
                 'pg.2000.1',
                 'pg.2000.2'))), "Param table turned into multiple parameters, value set")
+
+    params.in <- attr(g3_to_r(list( g3a_time(1990, 2000), g3_formula(
+        quote(d),
+        d = g3_parameterized('par.years', value = 0, by_year = TRUE, exponentiate = TRUE),
+        x = NA) )), 'parameter_template')
+    ok(ut_cmp_identical(grep('^par', names(params.in), value = TRUE), c(
+        paste0('par.years.', 1990:2000, '_exp'),
+        NULL)), "exponentiate prefix ends up at the end of parameters")
 })

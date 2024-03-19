@@ -26,6 +26,17 @@ ok_group("g3s_time_convert: correct conversions", {
                                          200,201,212))), "Pseudoyear and year conversions correct")
 })
 
+ok(ut_cmp_identical(
+    g3s_time_convert(c("1999-01", "1999-02")),
+    c(199901L, 199902L)), "Parsed year/step string")
+
+ok(ut_cmp_identical(
+    g3s_time_convert(c(1999, 1999)),
+    c(199900L, 199900L)), "Step ignored if NULL")
+ok(ut_cmp_identical(
+    g3s_time_convert(c(1999, 1999), c('all', 'all')),
+    c(199900L, 199900L)), "Treated MFDB 'all' as NULL")
+
 stock_timeyear <- g3_stock('stock_timeyear', 1) %>% g3s_time(year = c(2002, 2004))
 stock_timeyear__num <- g3_stock_instance(stock_timeyear, 0)
 stock_timestep <- g3_stock('stock_timestep', 1) %>% g3s_time(times = c( g3s_time_convert(c(2000, 2003),c(1,2)) ))
@@ -59,6 +70,12 @@ actions <- list(
         "999" = ~{
             stock_modeltime_iterator <- stock_modeltime_iterator + 1
             nll <- g3_param('nll', value = 1)
+            REPORT(stock_timeyear__num)
+            REPORT(stock_timestep__num)
+            REPORT(stock_timebigstep__num)
+            REPORT(stock_modeltime__num)
+            REPORT(stock_modelyear__num)
+            REPORT(stock_modeltime__num)
         }))
 
 # Compile model
@@ -113,7 +130,10 @@ ok_group("g3s_modeltime", {
             .Dim = c(length = 1L, year = 5L),
             .Dimnames = list(length = "1:Inf", year = c("2000", "2001", "2002", "2003", "2004")))), "stock_modelyear__num: Aggregated by year")
 
-    if (nzchar(Sys.getenv('G3_TEST_TMB'))) gadget3:::ut_tmb_r_compare(model_fn, model_tmb, params, model_cpp = model_cpp, ignore_dimname = c('time', 'year'))
+    if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
+        model_tmb <- g3_tmb_adfun(model_cpp, params, compile_flags = c("-O0", "-g"))
+        gadget3:::ut_tmb_r_compare(model_fn, model_tmb, params, model_cpp = model_cpp)
+    }
 })
 
 ok_group("g3s_modeltime:project", {
@@ -142,7 +162,10 @@ ok_group("g3s_modeltime:project", {
             .Dim = c(length = 1L, year = 7L),
             .Dimnames = list(length = "1:Inf", year = c("2000", "2001", "2002", "2003", "2004", "2005", "2006")))), "stock_modelyear__num: Aggregated by year")
 
-    if (nzchar(Sys.getenv('G3_TEST_TMB'))) gadget3:::ut_tmb_r_compare(model_fn, model_tmb, params, model_cpp = model_cpp, ignore_dimname = c('time', 'year'))
+    if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
+        model_tmb <- g3_tmb_adfun(model_cpp, params, compile_flags = c("-O0", "-g"))
+        gadget3:::ut_tmb_r_compare(model_fn, model_tmb, params, model_cpp = model_cpp)
+    }
 })
 
 ok_group("g3s_modeltime:final_year_steps", {
@@ -188,5 +211,8 @@ ok_group("g3s_modeltime:final_year_steps", {
             .Dim = c(length = 1L, year = 5L),
             .Dimnames = list(length = "1:Inf", year = c("2000", "2001", "2002", "2003", "2004")))), "stock_modelyear__num: Aggregated by year (2004 short)")
 
-    if (nzchar(Sys.getenv('G3_TEST_TMB'))) gadget3:::ut_tmb_r_compare(model_fn, model_tmb, params, model_cpp = model_cpp, ignore_dimname = c('time', 'year'))
+    if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
+        model_tmb <- g3_tmb_adfun(model_cpp, params, compile_flags = c("-O0", "-g"))
+        gadget3:::ut_tmb_r_compare(model_fn, model_tmb, params, model_cpp = model_cpp)
+    }
 })

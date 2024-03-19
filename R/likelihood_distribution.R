@@ -118,8 +118,8 @@ g3l_distribution_surveyindices <- function (fit = 'log', alpha = NULL, beta = NU
         list(N = N, I = I))
     return(out)
 }
-g3l_distribution_surveyindices_log <- function (alpha = NULL, beta = NULL) g3l_distribution_surveyindices('log', alpha, beta)
-g3l_distribution_surveyindices_linear <- function (alpha = NULL, beta = NULL) g3l_distribution_surveyindices('linear', alpha, beta)
+g3l_distribution_surveyindices_log <- function (alpha = NULL, beta = 1) g3l_distribution_surveyindices('log', alpha, beta)
+g3l_distribution_surveyindices_linear <- function (alpha = NULL, beta = 1) g3l_distribution_surveyindices('linear', alpha, beta)
 
 # i.e. catchinkilo's sumofsquares
 g3l_distribution_sumofsquaredlogratios <- function (epsilon = 10) {
@@ -130,6 +130,24 @@ g3l_distribution_sumofsquaredlogratios <- function (epsilon = 10) {
         ) ** 2)
     ), list(
         epsilon = epsilon))
+}
+
+g3_distribution_preview <- function (
+        obs_data,
+        fleets = list(),
+        stocks = list(),
+        area_group = NULL) {
+    ld <- g3l_likelihood_data(
+        'preview',
+        obs_data,
+        missing_val = NA,
+        all_stocks = stocks,
+        all_fleets = fleets,
+        area_group = area_group,
+        model_history = "" )
+    if (!is.null(ld$number)) return(ld$number)
+    if (!is.null(ld$weight)) return(ld$weight)
+    stop('Could not find output array')
 }
 
 # Compare model state to observation data
@@ -159,15 +177,21 @@ g3l_distribution <- function (
         weight = substitute(
             g3_param(n, optimise = FALSE, value = 1),
             list(n = paste0(nll_name, "_weight"))),
-        run_at = 10) {
+        run_at = g3_action_order$likelihood) {
     stopifnot(is.character(nll_name) && length(nll_name) == 1)
     stopifnot(is.data.frame(obs_data))
     stopifnot(is.list(fleets) && all(sapply(fleets, g3_is_stock)))
     stopifnot(is.list(stocks) && all(sapply(stocks, g3_is_stock)))
     stopifnot(rlang::is_formula(function_f))
     stopifnot(is.list(transform_fs) && all(sapply(transform_fs, rlang::is_formula)))
-    if (!report && "modelstock__time_idx" %in% all.vars(function_f)) {
-        stop("report must be TRUE when using this comparison function (probably g3l_distribution_surveyindices)")
+
+    if ("modelstock__time_idx" %in% all.vars(function_f)) {
+        # g3l_distribution_surveyindices needs to generate time vectors, so needs time early in dimension list
+        model_history <- 'early'
+    } else if (report) {
+        model_history <- 'late'
+    } else {
+        model_history <- ''
     }
 
     # Replace any __x vars in (f) with (repl_postfix), e.g. "num"
@@ -223,7 +247,7 @@ g3l_distribution <- function (
         sep = "_")
 
     # Convert data to stocks
-    ld <- g3l_likelihood_data(nll_name, obs_data, missing_val = missing_val, area_group = area_group, model_history = report, all_stocks = stocks, all_fleets = fleets)
+    ld <- g3l_likelihood_data(nll_name, obs_data, missing_val = missing_val, area_group = area_group, model_history = model_history, all_stocks = stocks, all_fleets = fleets)
     modelstock <- ld$modelstock
     obsstock <- ld$obsstock
     if (!is.null(ld$number)) {
@@ -235,8 +259,8 @@ g3l_distribution <- function (
         obsstock__wgt <- g3_stock_instance(obsstock, ld$weight)
     }
 
-    # If no fleets, set fleet_stock = NULL, otherwise iterate over fleets
-    for (fleet_stock in (if (length(fleets) > 0) fleets else list(NULL))) for (prey_stock in stocks) {
+    # If no fleets, set predstock = NULL, otherwise iterate over fleets
+    for (predstock in (if (length(fleets) > 0) fleets else list(NULL))) for (prey_stock in stocks) {
         stock <- prey_stock  # Alias stock == prey_stock
 
         # Work out stock index for obs/model variables
@@ -254,15 +278,15 @@ g3l_distribution <- function (
         if (!is.null(ld$fleet_map)) {
             # Skip over fleets not part of the observation data, map to an index
             # NB: This is what stock_iterate() would do for us
-            if (is.null(ld$fleet_map[[fleet_stock$name]])) next
-            fleetidx_f <- f_substitute(~g3_idx(x), list(x = ld$fleet_map[[fleet_stock$name]]))
+            if (is.null(ld$fleet_map[[predstock$name]])) next
+            fleetidx_f <- f_substitute(~g3_idx(x), list(x = ld$fleet_map[[predstock$name]]))
         } else {
             # Not using fleet grouping, __predby_fleet__idx variable not needed
             fleetidx_f <- ~-1
         }
 
         # Inner formula to do collection
-        if (is.null(fleet_stock)) {
+        if (is.null(predstock)) {
             # No fleet -> Compare to abundance
             collect_f <- f_substitute(~{
                 if (compare_num) {
@@ -281,19 +305,19 @@ g3l_distribution <- function (
         } else {
             collect_f <- f_substitute(~{
                 if (compare_num) {
-                    debug_trace("Take prey_stock__predby_fleet_stock weight, convert to individuals, add to our count")
+                    debug_trace("Take prey_stock__predby_predstock weight, convert to individuals, add to our count")
                     stock_ss(modelstock__num) <- stock_ss(modelstock__num) + stock_reshape(modelstock,
-                        transform_f * tform_stock_ss(prey_stock__predby_fleet_stock) / avoid_zero_vec(tform_stock_ss(prey_stock__wgt)))
+                        transform_f * tform_stock_ss(prey_stock__predby_predstock) / avoid_zero_vec(tform_stock_ss(prey_stock__wgt)))
                 }
                 if (compare_wgt) {
-                    debug_trace("Take prey_stock__predby_fleet_stock weight, add to our count")
+                    debug_trace("Take prey_stock__predby_predstock weight, add to our count")
                     stock_ss(modelstock__wgt) <- stock_ss(modelstock__wgt) + stock_reshape(modelstock,
-                        transform_f * tform_stock_ss(prey_stock__predby_fleet_stock))
+                        transform_f * tform_stock_ss(prey_stock__predby_predstock))
                 }
             }, list(
                 compare_num = !is.null(ld$number),
                 compare_wgt = !is.null(ld$weight),
-                prey_stock__predby_fleet_stock = as.symbol(paste0('prey_stock__predby_', fleet_stock$name))))
+                prey_stock__predby_predstock = as.symbol(paste0('prey_stock__predby_', predstock$name))))
         }
 
         # Wrap with any iteration for transformations
@@ -333,17 +357,17 @@ g3l_distribution <- function (
         collect_f <- f_substitute(collect_f, list(transform_f = transform_f))
 
         # Finally iterate/intersect over stock in question
-        out[[step_id(run_at, 'g3l_distribution', nll_name, 1, fleet_stock, prey_stock)]] <- f_optimize(f_substitute(~{
-            if (compare_fleet) debug_label(prefix, "Collect catch from ", fleet_stock, "/", prey_stock, " for ", nll_name)
+        out[[step_id(run_at, 'g3l_distribution', nll_name, 1, predstock, prey_stock)]] <- f_optimize(f_substitute(~{
+            if (compare_fleet) debug_label(prefix, "Collect catch from ", predstock, "/", prey_stock, " for ", nll_name)
             if (!compare_fleet) debug_label(prefix, "Collect abundance from ", stock, " for ", nll_name)
             stock_iterate(prey_stock, stock_intersect(modelstock, collect_f))
-        }, list(compare_fleet = !is.null(fleet_stock), collect_f = collect_f)))
+        }, list(compare_fleet = !is.null(predstock), collect_f = collect_f)))
 
         # Fix-up stock intersection, add in stockidx_f
-        out[[step_id(run_at, 'g3l_distribution', nll_name, 1, fleet_stock, prey_stock)]] <- f_substitute(out[[step_id(run_at, 'g3l_distribution', nll_name, 1, fleet_stock, prey_stock)]], list(
+        out[[step_id(run_at, 'g3l_distribution', nll_name, 1, predstock, prey_stock)]] <- f_substitute(out[[step_id(run_at, 'g3l_distribution', nll_name, 1, predstock, prey_stock)]], list(
             fleetidx_f = fleetidx_f,
             stockidx_f = stockidx_f))
-        out[[step_id(run_at, 'g3l_distribution', nll_name, 1, fleet_stock, prey_stock)]] <- g3_step(out[[step_id(run_at, 'g3l_distribution', nll_name, 1, fleet_stock, prey_stock)]])
+        out[[step_id(run_at, 'g3l_distribution', nll_name, 1, predstock, prey_stock)]] <- g3_step(out[[step_id(run_at, 'g3l_distribution', nll_name, 1, predstock, prey_stock)]])
     }
 
     nllstock <- g3_storage(paste("nll", nll_name, sep = "_"))
@@ -362,8 +386,6 @@ g3l_distribution <- function (
                 nll <- nll + (weight) * cur_cdist_nll
                 stock_ss(nllstock__x) <- stock_ss(nllstock__x) + cur_cdist_nll
                 stock_ss(nllstock__weight) <- weight
-                # NB: Have to report obsstock__x explicitly because it's just data.
-                if (report) REPORT(obsstock__x)
             }))))
             if (!report) {
                 debug_trace("Zero counters for next reporting period")
@@ -388,7 +410,50 @@ g3l_distribution <- function (
             generic_var_replace(compare_f, 'wgt')
     }
 
-    return(as.list(out))
+    if (!report) return(as.list(out))
+
+    return(c(as.list(out),
+        if (!('modelstock__params' %in% names(environment(function_f)))) NULL else g3a_report_var(
+            "modelstock__params",
+            environment(function_f)$modelstock__params,
+            stock = modelstock,
+            out_prefix = NULL ),
+        if (is.null(ld$number)) NULL else g3a_report_var(
+            "obsstock__num",
+            obsstock__num,
+            stock = obsstock,
+            out_prefix = NULL ),
+        if (is.null(ld$number)) NULL else g3a_report_var(
+            "modelstock__num",
+            modelstock__num,
+            stock = modelstock,
+            out_prefix = NULL ),
+        if (is.null(ld$number)) NULL else g3a_report_var(
+            "nllstock__num",
+            nllstock__num,
+            stock = nllstock,
+            out_prefix = NULL ),
+        if (is.null(ld$weight)) NULL else g3a_report_var(
+            "obsstock__wgt",
+            obsstock__wgt,
+            stock = obsstock,
+            out_prefix = NULL ),
+        if (is.null(ld$weight)) NULL else g3a_report_var(
+            "modelstock__wgt",
+            modelstock__wgt,
+            stock = modelstock,
+            out_prefix = NULL ),
+        if (is.null(ld$weight)) NULL else g3a_report_var(
+            "nllstock__wgt",
+            nllstock__wgt,
+            stock = nllstock,
+            out_prefix = NULL ),
+        g3a_report_var(
+            "nllstock__weight",
+            nllstock__weight,
+            stock = nllstock,
+            out_prefix = NULL ),
+        NULL))
 }
 g3l_catchdistribution <- g3l_distribution
 g3l_abundancedistribution <- g3l_distribution

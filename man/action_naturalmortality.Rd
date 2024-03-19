@@ -1,6 +1,7 @@
 \name{action_naturalmortality}
 \alias{g3a_naturalmortality_exp}
 \alias{g3a_naturalmortality}
+\concept{G3 action}
 
 \title{Gadget3 natural mortality action}
 \description{
@@ -9,16 +10,15 @@
 
 \usage{
 g3a_naturalmortality_exp(
-        param_f = g3_parameterized('M', by_stock = by_stock, by_age = by_age),
+        param_f = g3_parameterized('M', by_stock = by_stock, by_age = TRUE),
         by_stock = TRUE,
-        by_age = FALSE,
         action_step_size_f = ~cur_step_size)
 
 g3a_naturalmortality(
         stock,
         mortality_f = g3a_naturalmortality_exp(),
         run_f = TRUE,
-        run_at = 4)
+        run_at = g3_action_order$naturalmortality)
 
 }
 
@@ -33,9 +33,6 @@ g3a_naturalmortality(
   \item{by_stock}{
     Change the default parameterisation (e.g. to be by 'species'), see \code{\link{g3_parameterized}}.
   }
-  \item{by_age}{
-    Change the default parameterisation to be per stock age, see \code{\link{g3_parameterized}}.
-  }
   \item{stock}{
     \code{\link{g3_stock}} mortality applies to.
   }
@@ -46,7 +43,7 @@ g3a_naturalmortality(
     \link{formula} specifying a condition for running this action, default always runs.
   }
   \item{run_at}{
-    Integer order that actions will be run within model, see "Ordering of actions" in \code{vignette("model_structure")}.
+    Integer order that actions will be run within model, see \code{\link{g3_action_order}}.
   }
 }
 
@@ -86,7 +83,7 @@ naturalmortality_action <- g3a_naturalmortality(ling_imm)
 # NB: M is used in both g3a_naturalmortality and g3a_renewal_initabund, to
 # customise, you need to make sure the definitions are in sync, for example:
 
-M <- g3_parameterized('M', by_stock = TRUE, by_age = TRUE)
+M <- g3_parameterized('M', by_stock = TRUE, by_age = FALSE)
 actions <- list(
     g3a_naturalmortality(ling_imm,
         g3a_naturalmortality_exp(M)),

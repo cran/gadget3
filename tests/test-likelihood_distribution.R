@@ -23,6 +23,43 @@ g3_logspace_add <- g3_env$logspace_add
 g3_logspace_add_vec <- g3_env$logspace_add_vec
 g3_lgamma_vec <- lgamma
 
+ok_group("g3_distribution_preview", {
+    dat <- expand.grid(year = 1990:1994, step = 2, area = 'IXa')
+    dat$number <- seq_len(nrow(dat))
+    out <- g3_distribution_preview(dat, area_group = c(IXa = 1))
+    ok(ut_cmp_equal(out, structure(
+        1:5,
+        dim = c(length = 1L, time = 5L, area = 1L),
+        dimnames = list(
+            length = "0:Inf",
+            time = c("1990-02", "1991-02", "1992-02", "1993-02", "1994-02"),
+            area = "IXa") )), "Returned number array")
+
+    dat <- expand.grid(year = 1990:1994, step = 2, area = 'IXa')
+    dat$weight <- seq_len(nrow(dat)) * 40
+    out <- g3_distribution_preview(dat, area_group = c(IXa = 1))
+    ok(ut_cmp_equal(out, structure(
+        1:5 * 40,
+        dim = c(length = 1L, time = 5L, area = 1L),
+        dimnames = list(
+            length = "0:Inf",
+            time = c("1990-02", "1991-02", "1992-02", "1993-02", "1994-02"),
+            area = "IXa") )), "Returned weight array")
+
+    dat <- expand.grid(year = 1990:1994, step = 2, area = 'IXa')
+    dat$number <- seq_len(nrow(dat)) * 9
+    dat$weight <- seq_len(nrow(dat)) * 40
+    out <- g3_distribution_preview(dat, area_group = c(IXa = 1))
+    ok(ut_cmp_equal(out, structure(
+        1:5 * 9,
+        dim = c(length = 1L, time = 5L, area = 1L),
+        dimnames = list(
+            length = "0:Inf",
+            time = c("1990-02", "1991-02", "1992-02", "1993-02", "1994-02"),
+            area = "IXa") )), "Number array wins if both present")
+
+})
+
 ok_group("g3l_distribution_sumofsquares", {
     ok(cmp_grep(
         deparse1(environment(g3l_distribution_sumofsquares(c('area', 'age')))$modelstock__sstotal),
@@ -51,7 +88,10 @@ ok_group("g3l_distribution_sumofsquares", {
     obsdata$number <- runif(nrow(obsdata))
     model_fn <- g3_to_r(list(
         # Keep TMB happy
-        g3_formula( nll <- nll + g3_param("dummy", value = 0) ),
+        g3_formula({
+            nll <- nll + g3_param("dummy", value = 0) 
+            REPORT(prey_a__num)
+        }),
         g3a_time(2000, 2001),
         g3a_initialconditions(prey_a,
             num_f = g3_formula(stock_ss(prey_a__init), prey_a__init = prey_a__init),
@@ -214,24 +254,6 @@ ok(ut_cmp_error(g3l_abundancedistribution(
     area_group = areas,
     g3l_distribution_sumofsquares()), "Fleets must not be supplied"), "g3l_abundancedistribution: Invalid with fleets")
 
-# Can't make g3l_distribution_surveyindices without report
-ok(ut_cmp_error(g3l_abundancedistribution(
-    'surveyindices',
-    surveyindices_data,
-    fleets = list(),
-    stocks = list(prey_b),
-    area_group = areas,
-    g3l_distribution_surveyindices_linear(alpha = ~g3_param("si_alpha", value = 0), beta = ~g3_param("si_beta", value = 0)),
-    report = FALSE), "report"), "Can't have report = FALSE & g3l_distribution_surveyindices_linear")
-ok(ut_cmp_error(g3l_abundancedistribution(
-    'surveyindices',
-    surveyindices_data,
-    fleets = list(),
-    stocks = list(prey_b),
-    area_group = areas,
-    g3l_distribution_surveyindices_log(alpha = ~g3_param("si_alpha", value = 0), beta = ~g3_param("si_beta", value = 0)),
-    report = FALSE), "report"), "Can't have report = FALSE & g3l_distribution_surveyindices_log")
-
 # Generate a step that reports the value of (var_name) into separate variable (steps) times
 # (initial_val) provides a definition to use to set variable type
 report_step <- function (var_name, steps, initial_val) {
@@ -239,16 +261,22 @@ report_step <- function (var_name, steps, initial_val) {
     for (i in seq(steps - 1, 0, by = -1)) {
         step_var_name <- paste0("step", i, "_", var_name)
         assign(step_var_name, initial_val)
-        out <- gadget3:::f_substitute(~if (cur_time == i) {
+        out <- gadget3:::f_optimize(gadget3:::f_substitute(~if (cur_time == i) {
             comment(report_comment)
-            step_var[] <- var
+            if (is_nll) {
+                # nll is a scalar, and should have attributes stripped
+                step_var <- as.numeric(nll)
+            } else {
+                step_var[] <- var
+            }
             REPORT(step_var)
         } else rest, list(
             report_comment = paste0("Reporting on ", var_name, " at step ", i),
+            is_nll = var_name == 'nll',
             step_var = as.symbol(step_var_name),
             var = as.symbol(var_name),
             i = i,
-            rest = out))
+            rest = out )))
     }
     return(out)
 }

@@ -1,3 +1,31 @@
+# gadget3 0.11-0:
+
+## Bug fixes
+* g3_to_r() output can be debugged in R-Studio
+* Unknown stock names in likelihood data now an error
+* ``g3l_distribution_surveyindices_*()`` can now be broken down by age without error
+
+## New features
+* Add ``g3_parameterized('x', by_year = 1998:2099)`` to override year range for parameters
+* Add ``g3a_initialconditions_normalcv`` for initialconditions driven by a ``lencv`` parameter
+* Add ``g3a_renewal_normalcv`` for initialconditions driven by a ``lencv`` parameter
+* ``by_predator`` parameter for ``g3_parameterized``
+* Defaults for ``g3_suitability_exponentiall50``
+* Support cut() formatted character columns as well as factor columns in likelihood observation data.
+* Add ``g3_init_val()`` helper, to replace ``gadgetutils::g3_init_guess()``
+* Add ``g3_areas()`` helper to create numbered area vectors
+* Add ``g3_distribution_preview()`` helper to see how observatation data will be converted to array
+* ``period`` now optional for ``g3l_random_walk()``, ``g3l_random_dnorm()``
+* ``g3l_bounds_penalty()`` can now generate bounds from actions which update automatically
+
+## Breaking changes
+
+* ``g3l_distribution_surveyindices_*`` now default to ``beta = 1``, set ``beta = NULL`` to restore previous behaviour.
+* ``stock_param``() & ``stock_param_table``() replaced with ``stock_prepend``()
+* Remove unused ``g3_to_tmb(adreport_re)`` option #60
+* Naturalmortality ``M`` now by-age by default #113
+* ``g3_suitability_andersenfleet()`` now uses ``by_predator = TRUE`` by default #133
+
 # gadget3 0.10-0:
 
 ## New features

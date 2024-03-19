@@ -10,8 +10,8 @@
 \alias{stock_iterate}
 \alias{stock_intersect}
 \alias{stock_interact}
-\alias{stock_param}
-\alias{stock_param_table}
+\alias{stock_prepend}
+\concept{G3 internals}
 
 \title{G3 stock_* transformation functions}
 \description{
@@ -147,25 +147,14 @@ g3_step(step_f, recursing = FALSE, orig_env = environment(step_f))
 
 }
 
-\section{stock_param}{
-  \code{stock_param(stock, name, name_part = NULL, ...)}
+\section{stock_prepend}{
+  \code{stock_prepend(stock, param_call, name_part = NULL)}
 
-  Convert to a call to \link{g3_param}, prefixing the \var{name} with the stock name.
-  If \var{name_part} given, only use given part(s) of the stock name.
+  Converts a \link{g3_param} or \link{g3_param_table} call, prefixing the
+  parameter name with the stock name, and renaming any references to stock variables.
+  If \var{name_part} given, will only add given part(s) of the stock name.
 
-  All other args passed through to \link{g3_param}.
-}
-
-\section{stock_param_table}{
-  \code{stock_param_table(stock, name, name_part = NULL, table_defn, ...)}
-
-  Convert to a call to \link{g3_param_table}, prefixing the \var{name} with the stock name.
-  If \var{name_part} given, only use given part(s) of the stock name.
-
-  The \var{table_defn} will have any instances of \var{stock} replaced using \link{stock_with}().
-
-  All other args passed through to \link{g3_param_table}.
-
+  Returns \var{param_call} with the additions made.
 }
 
 \value{
@@ -186,8 +175,10 @@ stock <- g3_stock('halibut', 1:10) \%>\% g3s_age(1,10)
 g3_step(~stock_assert(stock_with(stock, all(is.finite(stock__num))), stock, "__num became NaN/Inf"))
 
 ### stock_reshape
-imm_stock <- g3_stock('halibut.imm', 1:5) \%>\% g3s_age(1,3)
-g3_step(~stock_reshape(stock, stock_ss(imm_stock__transitioning_num)))
+s <- g3_stock('s', seq(3, 21, 3))
+s__num <- g3_stock_instance(s, 100)
+agg <- g3_stock('agg', c(3, 10, 21), open_ended = FALSE)
+g3_eval(~stock_iterate(s, stock_reshape(agg, stock_ss(s__num))))
 
 ### stock_ss
 stock <- g3_stock('halibut', 1:10) \%>\% g3s_age(1,10) \%>\% g3s_livesonareas(1)
@@ -229,15 +220,4 @@ prey_stock <- g3_stock('herring', 1:3) \%>\% g3s_age(1,3)
 g3_step(~stock_iterate(stock, stock_interact(prey_stock, {
   x <- x + stock_ss(stock__num) + stock_ss(prey_stock__num)
 }, prefix = "prey" )))
-
-### stock_param
-stock <- g3_stock(c(species = 'halibut', sex = 'm', 'imm'), 1:10) \%>\% g3s_age(1,10)
-g3_step(~stock_param(stock, 'K'))
-g3_step(~stock_param(stock, 'K', name_part = 'species'))
-g3_step(~stock_param(stock, 'K', name_part = c('species', 'sex')))
-
-### stock_param_table
-stock <- g3_stock(c(species = 'halibut', 'imm'), 1:10) \%>\% g3s_age(1,10)
-g3_step(~stock_param_table(stock, 'K', expand.grid(year = 2000:2004)))
-g3_step(~stock_param_table(stock, 'K', expand.grid(age = seq(stock__minage, stock__maxage))))
 }

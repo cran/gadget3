@@ -4,10 +4,16 @@ open_curly_bracket <- intToUtf8(123) # Don't mention the bracket, so code editor
 # The attached environment contains model_data, i.e. fixed values refered to within function
 g3_to_r <- function(actions, trace = FALSE, strict = FALSE) {
     collated_actions <- g3_collate(actions)
-    all_actions <- f_concatenate(collated_actions, parent = g3_env, wrap_call = call("while", TRUE))
+    all_actions <- f_concatenate(c(
+        g3_formula(quote(cur_time <- cur_time + 1L), cur_time = -1L),
+        collated_actions,
+        NULL), parent = g3_env, wrap_call = call("while", TRUE))
     # NB: Needs to be globalenv() to evaluate core R
     model_env <- new.env(parent = globalenv())
     scope <- list()
+
+    # R always reports
+    model_env$reporting_enabled <- 1L
 
     # Enable / disable strict mode & trace mode
     all_actions <- call_replace(all_actions,
@@ -52,10 +58,11 @@ g3_to_r <- function(actions, trace = FALSE, strict = FALSE) {
 
                 # Add stopifnot for each row in table
                 for (i in seq_len(nrow(df))) {
-                    param_name <- paste0(c(as.character(x[[2]]), df[i,]), collapse = ".")
-                    scope[[paste0("..param:", param_name)]] <<- structure(
-                        substitute(stopifnot(p %in% names(param)), list(p = param_name)),
-                        param_template = df_template(param_name))
+                    sub_param_name <- gen_param_tbl_name(as.character(x[[2]]), df[i,])
+
+                    scope[[paste0("..param:", sub_param_name)]] <<- structure(
+                        substitute(stopifnot(p %in% names(param)), list(p = sub_param_name)),
+                        param_template = df_template(sub_param_name))
                 }
 
                 # Replace with a  param[["lookup.cur_year.cur_step"]] call
@@ -67,17 +74,27 @@ g3_to_r <- function(actions, trace = FALSE, strict = FALSE) {
                     ifmissing))
             }
 
+            if (x[[1]] == 'g3_param_upper' || x[[1]] == 'g3_param_lower') {
+                # We have no bounds for R. Hard-code to NA, short-circuiting any bounds-checking
+                return(NA)
+            }
+
             # Default for g3_param / g3_param_vector
-            # NB: We haven't actually used ..param:thing, but will end up in top of function anyway
-            scope[[paste0("..param:", x[[2]])]] <<- structure(
-                substitute(stopifnot(p %in% names(param)), list(p = x[[2]])),
-                param_template = df_template(x[[2]]))
+            if (x[[1]] != 'g3_param_nodef') {
+                # NB: We haven't actually used ..param:thing, but will end up in top of function anyway
+                scope[[paste0("..param:", x[[2]])]] <<- structure(
+                    substitute(stopifnot(p %in% names(param)), list(p = x[[2]])),
+                    param_template = df_template(x[[2]]))
+            }
             return(call('[[', as.symbol("param"), x[[2]]))
         }
         code <- call_replace(code,
             g3_param_table = repl_fn,
             g3_param_array = repl_fn,
             g3_param_vector = repl_fn,
+            g3_param_upper = repl_fn,
+            g3_param_lower = repl_fn,
+            g3_param_nodef = repl_fn,
             g3_param = repl_fn)
 
         # Find all things that have definitions in our environment
@@ -102,7 +119,7 @@ g3_to_r <- function(actions, trace = FALSE, strict = FALSE) {
 
         # TODO: Should this loop be combined with the above?
         for (var_name in all_undefined_vars(code)) {
-            if (var_name %in% names(scope)) {
+            if (var_name %in% names(scope) || var_name %in% names(model_env)) {
                 # Already init'ed this, ignore it.
                 next
             }
@@ -158,23 +175,24 @@ g3_to_r <- function(actions, trace = FALSE, strict = FALSE) {
     # Define all vars, populating scope as side effect
     all_actions_code <- var_defns(rlang::f_rhs(all_actions), rlang::f_env(all_actions))
 
-    # Make sure REPORT is defined for g3_report_all()
-    if ('g3_report_all' %in% all.names(all_actions_code, unique = TRUE)) {
-        var_defns(quote( REPORT(0) ), rlang::f_env(all_actions))
+    # Bodge gen_dimnames into environment
+    # NB: That we need to do this is a bug
+    if (exists('gen_dimnames', environment(all_actions), inherits = TRUE)) {
+        assign('gen_dimnames',
+            get('gen_dimnames', environment(all_actions), inherits = TRUE),
+            envir = model_env)
     }
 
     # Wrap all steps in a function call
     out <- call("function", pairlist(param = alist(y=)$y), as.call(c(
         list(as.symbol(open_curly_bracket)),
         scope,
-        all_actions_code,
-        quote(stop("Should have return()ed somewhere in the loop")))))
+        all_actions_code )))
 
     # Rework any g3_* function calls into the code we expect
     g3_functions <- function (in_code) {
         call_replace(in_code,
             g3_idx = function (x) if (is.call(x[[2]])) g3_functions(x[[2]]) else call("(", g3_functions(x[[2]])),  # R indices are 1-based, so just strip off call
-            g3_report_all = function (x) g3_functions(action_reports(collated_actions, REPORT = '.')),
             g3_with = function (x) as.call(c(
                 list(as.symbol(open_curly_bracket)),
                 lapply(g3_with_extract_terms(x), function (c) { c[[3]] <- g3_functions(c[[3]]) ; c }),
@@ -207,7 +225,8 @@ g3_r_compile <- function (model, work_dir = tempdir(), optimize = 3) {
 
     # Restore model data and attributes
     environment(out) <- environment(model)
-    attributes(out) <- attributes(model)
+    # NB: We need to do this since the environment pointers will be broken in the serialised version
+    attr(out, 'actions') <- attr(model, 'actions')
 
     # Optimize model function
     out <- compiler::cmpfun(out, options = list(optimize = optimize))
@@ -229,4 +248,18 @@ edit.g3_r <- function(name = NULL, file = "", title = NULL, editor = getOption("
     attributes(out) <- oldattr
     environment(out) <- environment(name)
     return(out)
+}
+
+print.g3_r <- function(x, ..., with_environment = FALSE, with_template = FALSE) {
+    a <- attributes(x)
+    attributes(x) <- NULL
+    print.function(x)
+    if (with_environment) {
+        writeLines("Environment:")
+        str(as.list(environment(x)), no.list = TRUE)
+    }
+    if (with_template) {
+        writeLines("Parameter template:")
+        str(a$parameter_template, no.list = TRUE)
+    }
 }

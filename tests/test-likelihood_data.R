@@ -5,10 +5,18 @@ library(gadget3)
 
 
 # Helper to generate ld from table string and attributes
-generate_ld <- function (tbl, all_stocks = list(), all_fleets = list(), ...) {
+generate_ld <- function (tbl, all_stocks = list(), all_fleets = list(), use_preview = FALSE, ...) {
     if (is.character(tbl)) tbl <- read.table(text = tbl, header = TRUE, stringsAsFactors = TRUE)
     if (is.null(tbl$number)) tbl$number <- as.numeric(seq_len(nrow(tbl)))
-    out <- gadget3:::g3l_likelihood_data('ut', structure(tbl, ...), all_stocks = all_stocks, all_fleets = all_fleets)
+    all_stocks <- lapply(all_stocks, function (x) g3_stock(x, 1))
+    if (use_preview) {
+        # Use new public preview function
+        out <- list(
+            number = g3_distribution_preview(structure(tbl, ...), stocks = all_stocks, fleets = all_fleets) )
+    } else {
+        # Fall back to old behaviour
+        out <- gadget3:::g3l_likelihood_data('ut', structure(tbl, ...), all_stocks = all_stocks, all_fleets = all_fleets)
+    }
 
     # NB: A failed merge would result in repeated instances
     ok(ut_cmp_equal(
@@ -94,8 +102,35 @@ ok_group('g3l_likelihood_data:time', {
           0:Inf 2000-01    4
           0:Inf 2000-02    5
         "), "Year gap, wonky year order preserved")
-})
 
+    ld <- generate_ld("
+        time number
+        1998 1
+        2002 2
+        2001 3
+    ")
+    ok(cmp_array(ld$number, "
+        length time Freq
+          0:Inf 1998    1
+          0:Inf 2001    3
+          0:Inf 2002    2
+        "), "Time column used when year not present (i.e. can parse our own output)")
+
+    ld <- generate_ld("
+        time number
+        1998-01 2
+        1998-02 4
+        1999-01 3
+        1999-02 9
+    ")
+    ok(cmp_array(ld$number, "
+        length time Freq
+          0:Inf 1998-01    2
+          0:Inf 1998-02    4
+          0:Inf 1999-01    3
+          0:Inf 1999-02    9
+        "), "Year-step separated in time column")
+})
 
 ok_group('g3l_likelihood_data:length', {
     ld <- generate_ld("
@@ -210,6 +245,35 @@ ok_group('g3l_likelihood_data:length', {
         length = list(
             a = structure(quote(seq(10, 20)), min = 10, max = 20),
             b = structure(quote(seq(20, 40)), min = 20, max = 40),
+            c = structure(quote(seq(40, 80)), min = 40, max = 80) ),
+        use_preview = TRUE )
+    ok(cmp_array(ld$number, "
+        length time   Freq
+         10:20 1999 1999.1
+         20:40 1999 1999.2
+         40:80 1999 1999.3
+         10:20 2000 2000.1
+         20:40 2000 2000.2
+         40:80 2000     NA
+         10:20 2001 2001.1
+         20:40 2001 2001.2
+         40:80 2001 2001.3
+        "), "Use lengths, removed names from attribute, gaps filled in (with new g3_distribution_preview)")
+
+    ld <- generate_ld("
+        year length number
+        1999      a      1999.1
+        2000      a      2000.1
+        2001      a      2001.1
+        1999      b      1999.2
+        2000      b      2000.2
+        2001      b      2001.2
+        1999      c      1999.3
+        2001      c      2001.3
+        ",
+        length = list(
+            a = structure(quote(seq(10, 20)), min = 10, max = 20),
+            b = structure(quote(seq(20, 40)), min = 20, max = 40),
             c = structure(quote(seq(40, 80)), min = 40, max = 80, max_open_ended = TRUE)))
     ok(cmp_array(ld$number, "
         length time   Freq
@@ -295,6 +359,102 @@ ok_group('g3l_likelihood_data:length_factor', {
     }, "Gaps in length groups are not supported: \\[0,10\\), \\[20, 40\\)"), "Complained about gaps in length groups")
 })
 
+
+ok_group('g3l_likelihood_data:age_char', {
+    ld <- generate_ld(expand.grid(
+        year = 1990,
+        length = as.character(cut(seq(3, 47, by=5), seq(0, 50, by = 5), right = FALSE)),
+        age = 1:2,
+        stringsAsFactors = FALSE))
+    ok(cmp_array(ld$number, "
+        length  age time   Freq
+           0:5 age1 1990    1
+          5:10 age1 1990    2
+         10:15 age1 1990    3
+         15:20 age1 1990    4
+         20:25 age1 1990    5
+         25:30 age1 1990    6
+         30:35 age1 1990    7
+         35:40 age1 1990    8
+         40:45 age1 1990    9
+           0:5 age2 1990   10
+          5:10 age2 1990   11
+         10:15 age2 1990   12
+         15:20 age2 1990   13
+         20:25 age2 1990   14
+         25:30 age2 1990   15
+         30:35 age2 1990   16
+         35:40 age2 1990   17
+         40:45 age2 1990   18
+        "), "Converted back to factor, preserving ordering of entries")
+
+    ld <- generate_ld(expand.grid(
+        year = 1990,
+        length = as.character(cut(seq(3, 47, by=5), seq(0, 50, by = 5), right = FALSE)),
+        age = c('[1,3]', '[4,9]'),
+        stringsAsFactors = FALSE))
+    ok(cmp_array(ld$number, "
+        length  age time   Freq
+           0:5 1:3 1990    1
+          5:10 1:3 1990    2
+         10:15 1:3 1990    3
+         15:20 1:3 1990    4
+         20:25 1:3 1990    5
+         25:30 1:3 1990    6
+         30:35 1:3 1990    7
+         35:40 1:3 1990    8
+         40:45 1:3 1990    9
+           0:5 4:9 1990   10
+          5:10 4:9 1990   11
+         10:15 4:9 1990   12
+         15:20 4:9 1990   13
+         20:25 4:9 1990   14
+         25:30 4:9 1990   15
+         30:35 4:9 1990   16
+         35:40 4:9 1990   17
+         40:45 4:9 1990   18
+        "), "Can use intervals in strings, converted to groups")
+
+    ld <- generate_ld(data.frame(
+        year = 1990,
+        length = c(
+            as.character(cut(seq(23, 39, by=5), seq(0, 50, by = 5), right = FALSE)),
+            as.character(cut(seq(3, 47, by=5), seq(0, 50, by = 5), right = FALSE)),
+            NULL),
+        age = c(
+            rep(1, 4),
+            rep(2, 9),
+            NULL),
+        stringsAsFactors = FALSE))
+    ok(cmp_array(ld$number, "
+        length  age time   Freq
+           0:5 age1 1990    0
+          5:10 age1 1990    0
+         10:15 age1 1990    0
+         15:20 age1 1990    0
+         20:25 age1 1990    1
+         25:30 age1 1990    2
+         30:35 age1 1990    3
+         35:40 age1 1990    4
+         40:45 age1 1990    0
+           0:5 age2 1990    5
+          5:10 age2 1990    6
+         10:15 age2 1990    7
+         15:20 age2 1990    8
+         20:25 age2 1990    9
+         25:30 age2 1990   10
+         30:35 age2 1990   11
+         35:40 age2 1990   12
+         40:45 age2 1990   13
+        "), "Partial ranges padded out with zeros")
+
+    ld <- generate_ld(data.frame(
+        year = 1990,
+        length = cut(c(4, 14, 28, 33, 33, 44), c(seq(0, 50, by = 10), Inf), right = FALSE),
+        stringsAsFactors = TRUE))
+    ld_loopback <- generate_ld(as.data.frame.table(ld$number, responseName = 'number'))
+    ok(ut_cmp_equal(ld$number, ld_loopback$number), "Can parse our own output")
+})
 
 ok_group('g3l_likelihood_data:age', {
     ld <- generate_ld("
@@ -530,16 +690,24 @@ ok_group('g3l_likelihood_data:stock', {
           6 2000    b  2000.6
           4 2001    b  2001.4
           6 2001    b  2001.6
-        ")
+        ", all_stocks = c('a', 'b'))
     ok(ut_cmp_identical(dimnames(ld$number)[['stock']], c("a", "b")), "Array has stocks a & b")
     ok(ut_cmp_identical(ld$stock_map, list(a = 1L, b = 2L)), "stock_map is 1:1 mapping")
 
+    ok(ut_cmp_error(generate_ld("
+        age year stock number
+          3 1999    a  1999.3
+          4 1999    b  1999.4
+          5 1999    kapow  1999.6
+          6 1999    zot  1999.6
+        ", all_stocks = c('a', 'b')), "kapow, zot"), "Unknown stock names in data an error")
+
     # Generate a list of stocks "stock_(imm,mat)_(f,m)"
-    stocks <- lapply(paste(
+    stock_names <- paste(
         'stock',
         rep(c('imm', 'mat'), each = 2),
         c('f', 'm'),
-        sep = "_"), function (x) g3_stock(x, 1))
+        sep = "_")
     ld <- generate_ld("
         age year stock_re number
           3 1999    _f$  1999.3
@@ -549,7 +717,7 @@ ok_group('g3l_likelihood_data:stock', {
           6 2000    ^stock_imm  2000.6
           4 2001    ^stock_imm  2001.4
           6 2001    ^stock_mat  2001.6
-        ", all_stocks = stocks)
+        ", all_stocks = stock_names)
     ok(ut_cmp_identical(
         dimnames(ld$number)[['stock_re']],
         c("_f$", "^stock_mat", "^stock_imm")), "Array names are regexes")
@@ -561,12 +729,19 @@ ok_group('g3l_likelihood_data:stock', {
             stock_mat_f = 1L,
             stock_mat_m = 2L)), "Stock map used first regexes first")
 
+    ok(ut_cmp_error(generate_ld("
+        age year stock_re number
+          3 1999    _f$  1999.3
+          3 1999    _g$  1999.3
+          3 1999    _h$  1999.3
+        "), "_g\\$, _h\\$"), "Regexes that don't match anything an error")
+
     # Generate a list of stocks "stock_(imm,mat)_f" (NB: not male)
-    stocks <- lapply(paste(
+    stock_names <- paste(
         'stock',
         rep(c('imm', 'mat'), each = 2),
         c('f', 'm'),
-        sep = "_"), function (x) g3_stock(x, 1))
+        sep = "_")
     ld <- generate_ld("
         age year stock_re number
           3 1999    _mat_f$  1999.3
@@ -576,7 +751,7 @@ ok_group('g3l_likelihood_data:stock', {
           6 2000    _imm_f$  2000.6
           4 2001    _imm_f$  2001.4
           6 2001    _mat_f$  2001.6
-        ", all_stocks = stocks)
+        ", all_stocks = stock_names)
     ok(ut_cmp_identical(
         dimnames(ld$number)[['stock_re']],
         c("_mat_f$", "_imm_f$")), "Array names are regexes")

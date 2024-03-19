@@ -1,5 +1,6 @@
 \name{params}
 \alias{g3_parameterized}
+\concept{G3 utilities}
 
 \title{Gadget3 parameter helpers}
 \description{
@@ -10,6 +11,7 @@
 g3_parameterized(
         name,
         by_stock = FALSE,
+        by_predator = FALSE,
         by_year = FALSE,
         by_step = FALSE,
         by_age = FALSE,
@@ -33,11 +35,21 @@ g3_parameterized(
       \item{List of \code{\link{g3_stock}} objects}{Produce a parameter that applies to all given stocks}
     }
   }
+  \item{by_predator}{
+    Should there be individual parameters per-predator (read: per-fleet) stock?
+    \describe{
+      \item{FALSE}{No}
+      \item{TRUE}{Produce a \code{"fleet_stock_name.name"} parameter}
+      \item{character vector}{Select the stock name_part(s) to use, e.g. to produce \code{"fleet_country.name"} parameter with "country"}
+      \item{List of \code{\link{g3_stock}} objects}{Produce a parameter that applies to all given stocks}
+    }
+  }
   \item{by_year}{
     Should there be individual parameters per model year?
     \describe{
       \item{FALSE}{No}
       \item{TRUE}{Produce a \code{"name.1998"} parameter for each year the model runs}
+      \item{1998:2099}{Override the year range, so when projecting there will be sufficient parameters available.}
     }
   }
   \item{by_step}{
@@ -78,8 +90,7 @@ g3_parameterized(
 \seealso{
   \code{\link{g3_param}},
   \code{\link{g3_param_table}},
-  \code{\link{stock_param}},
-  \code{\link{stock_param_table}}
+  \code{\link{stock_prepend}}
 }
 
 \examples{
@@ -90,7 +101,7 @@ stock_b <- g3_stock(c(species = 'stock', 'bbb'), seq(10, 35, 5)) \%>\% g3s_age(1
 # Not by anything, so just a regular parameter
 g3_parameterized('K')
 
-# by_stock, so will use stock_param() to rename variables
+# by_stock, so will use stock_prepend() to rename variables
 g3_parameterized('K', by_stock = TRUE)
 
 # Adding by_year or by_age turns it into a table

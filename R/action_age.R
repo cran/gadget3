@@ -1,5 +1,11 @@
 # On final step of year, move stock into the next age bracket
-g3a_age <- function(stock, output_stocks = list(), output_ratios = rep(1 / length(output_stocks), times = length(output_stocks)), run_f = ~cur_step_final, run_at = 12, transition_at = 12) {
+g3a_age <- function(
+        stock,
+        output_stocks = list(),
+        output_ratios = rep(1 / length(output_stocks), times = length(output_stocks)),
+        run_f = ~cur_step_final,
+        run_at = g3_action_order$age,
+        transition_at = g3_action_order$age ) {
     out <- new.env(parent = emptyenv())
 
     # Replace anything of form xxx[.[1,2,3]] with xxx[1,2,3]
@@ -115,8 +121,6 @@ g3a_age <- function(stock, output_stocks = list(), output_ratios = rep(1 / lengt
         stock_with(stock, for (age in seq(stock__maxage, stock__minage, by = -1)) g3_with(
                 stock__age_idx := g3_idx(age - stock__minage + 1L), {
             debug_trace("Check stock has remained finite for this step")
-            if (strict_mode) stock_assert(all(is.finite(stock__num[age_iter_ss])), stock, "__num became NaN/Inf in this timestep")
-            if (strict_mode) stock_assert(all(is.finite(stock__wgt[age_iter_ss])), stock, "__wgt became NaN/Inf in this timestep")
 
             if (age == stock__maxage) {
                 final_year_f
