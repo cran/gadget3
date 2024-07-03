@@ -1,9 +1,9 @@
-## ---- message=FALSE, echo=FALSE-----------------------------------------------
+## ----message=FALSE, echo=FALSE------------------------------------------------
 library(gadget3)
 library(dplyr)
 set.seed(123)
 
-## ---- message=FALSE, echo=FALSE-----------------------------------------------
+## ----message=FALSE, echo=FALSE------------------------------------------------
 library(dplyr)
 area_names <- g3_areas(c('IXa', 'IXb'))
 fish <- g3_stock("fish", seq(5L, 25L, 5)) |>
@@ -80,7 +80,7 @@ ldist.lln.agg
 #     gadget3 knows about them even though they don't appear in the data.
 g3_distribution_preview(ldist.lln.agg)
 
-## ---- eval=nzchar(Sys.getenv('G3_TEST_TMB'))----------------------------------
+## ----eval=nzchar(Sys.getenv('G3_TEST_TMB'))-----------------------------------
 #  # Import data into a temporary database
 #  library(mfdb)
 #  mdb <- mfdb(tempfile(fileext=".duckdb"))

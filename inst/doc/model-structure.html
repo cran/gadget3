@@ -88,7 +88,8 @@ if (window.hljs) {
 
 <div id="TOC">
 <ul>
-<li><a href="#r-formula-or-the-tilde-operator">R formula, or the tilde operator</a></li>
+<li><a href="#r-formula-or-the-tilde-operator">R formula, or the tilde
+operator</a></li>
 <li><a href="#actions">Actions</a></li>
 <li><a href="#stocks">Stocks</a></li>
 <li><a href="#model-parameterization">Model parameterization</a></li>
@@ -97,11 +98,18 @@ if (window.hljs) {
 </ul>
 </div>
 
-<p>The following describes the structure of a gadget3 model, from the bottom up.</p>
+<p>The following describes the structure of a gadget3 model, from the
+bottom up.</p>
 <div id="r-formula-or-the-tilde-operator" class="section level2">
 <h2>R formula, or the tilde operator</h2>
-<p>Crucial to gadget3 is the <a href="https://stat.ethz.ch/R-manual/R-devel/library/stats/html/formula.html">R formula</a>, created using the tilde operator (<code>~</code>). These get used in several places in R for various things, but at their core the tilde operator stores the R code on the left and right hand sides, as well as the environment it was created in, which amounts to all variables defined at the time.</p>
-<p>For example, let’s declare a function that produces a formula, and make some:</p>
+<p>Crucial to gadget3 is the <a href="https://stat.ethz.ch/R-manual/R-devel/library/stats/html/formula.html">R
+formula</a>, created using the tilde operator (<code>~</code>). These
+get used in several places in R for various things, but at their core
+the tilde operator stores the R code on the left and right hand sides,
+as well as the environment it was created in, which amounts to all
+variables defined at the time.</p>
+<p>For example, let’s declare a function that produces a formula, and
+make some:</p>
 <pre class="r"><code>get_formula &lt;- function (size) {
     # NB: The reason we make a function here is so we have an isolated environment
     # to make examples cleaner.
@@ -111,17 +119,20 @@ if (window.hljs) {
 }
 f &lt;- get_formula(8)
 g &lt;- get_formula(5)</code></pre>
-<p><code>str()</code> shows <code>f</code> contains the formula’s code (not the result of cows + pigs), and has an environment attached:</p>
+<p><code>str()</code> shows <code>f</code> contains the formula’s code
+(not the result of cows + pigs), and has an environment attached:</p>
 <pre class="r"><code>str(f)</code></pre>
 <pre><code>## Class &#39;formula&#39;  language ~cows + pigs
-##   ..- attr(*, &quot;.Environment&quot;)=&lt;environment: 0x559ff59e1070&gt;</code></pre>
-<p>We can look into this environment, and see the values that got set for cows &amp; pigs:</p>
+##   ..- attr(*, &quot;.Environment&quot;)=&lt;environment: 0x55c15c6765c8&gt;</code></pre>
+<p>We can look into this environment, and see the values that got set
+for cows &amp; pigs:</p>
 <pre class="r"><code>str(as.list(environment(f)))</code></pre>
 <pre><code>## List of 3
 ##  $ pigs: num 32
 ##  $ cows: num 16
 ##  $ size: num 8</code></pre>
-<p>We can do similarly for <code>g</code>, and see the results are different:</p>
+<p>We can do similarly for <code>g</code>, and see the results are
+different:</p>
 <pre class="r"><code>str(as.list(environment(g)))</code></pre>
 <pre><code>## List of 3
 ##  $ pigs: num 20
@@ -129,10 +140,14 @@ g &lt;- get_formula(5)</code></pre>
 ##  $ size: num 5</code></pre>
 <p>Note that:</p>
 <ul>
-<li>R hasn’t at any point worked out <code>cows + pigs</code>, the code was stored for later use.</li>
-<li>The environment (i.e. all variables defined at that point) is “remembered”</li>
+<li>R hasn’t at any point worked out <code>cows + pigs</code>, the code
+was stored for later use.</li>
+<li>The environment (i.e. all variables defined at that point) is
+“remembered”</li>
 </ul>
-<p>A g3 model at it’s core is a list of formula objects that make up the model. We can even use Gadget3 to compile our simple example above into an R function:</p>
+<p>A g3 model at it’s core is a list of formula objects that make up the
+model. We can even use Gadget3 to compile our simple example above into
+an R function:</p>
 <pre class="r"><code>g3_to_r(list(f))</code></pre>
 <pre><code>## function (param) 
 ## {
@@ -144,8 +159,8 @@ g &lt;- get_formula(5)</code></pre>
 ##         cows + pigs
 ##     }
 ## }
-## &lt;bytecode: 0x559ff3b62660&gt;
-## &lt;environment: 0x559ff4de8b58&gt;</code></pre>
+## &lt;bytecode: 0x55c15ca8f5c0&gt;
+## &lt;environment: 0x55c15bc9b5c0&gt;</code></pre>
 <p>…or a TMB template:</p>
 <pre class="r"><code>g3_to_tmb(list(f))</code></pre>
 <pre><code>## #include &lt;TMB.hpp&gt;
@@ -164,13 +179,27 @@ g &lt;- get_formula(5)</code></pre>
 ##         cows + pigs;
 ##     }
 ## }</code></pre>
-<p>Obviously this in itself isn’t a very useful function, but you can see that the environment for the formula has provided the initial values for the variables, and the code itself has been put into the main loop.</p>
-<p>Also note that, despite appearances, we’re not generically converting R into C++. There’s a subset of R that gadget3 understands and knows how to convert. Using R libraries isn’t possible, for example. To simplify scoping rules, we assume variables are either global, and should have different names, or are iterators in loops, in which case they will be local to that loop.</p>
+<p>Obviously this in itself isn’t a very useful function, but you can
+see that the environment for the formula has provided the initial values
+for the variables, and the code itself has been put into the main
+loop.</p>
+<p>Also note that, despite appearances, we’re not generically converting
+R into C++. There’s a subset of R that gadget3 understands and knows how
+to convert. Using R libraries isn’t possible, for example. To simplify
+scoping rules, we assume variables are either global, and should have
+different names, or are iterators in loops, in which case they will be
+local to that loop.</p>
 </div>
 <div id="actions" class="section level2">
 <h2>Actions</h2>
-<p>In reality you will never be providing formulae to insert into models directly, you’d be using the g3 action functions to generate these for you. All action functions, prefixed with <code>g3a_</code>, produce a list of formula objects—an action in gadget3 parlance. These are where the gadget functionality is implemented.</p>
-<p>One of the simplest is <code>g3a_time</code>, which produces code that will count years/steps, and stop when the end of the time period is reached. For example:</p>
+<p>In reality you will never be providing formulae to insert into models
+directly, you’d be using the g3 action functions to generate these for
+you. All action functions, prefixed with <code>g3a_</code>, produce a
+list of formula objects—an action in gadget3 parlance. These are where
+the gadget functionality is implemented.</p>
+<p>One of the simplest is <code>g3a_time</code>, which produces code
+that will count years/steps, and stop when the end of the time period is
+reached. For example:</p>
 <pre class="r"><code>g3a_time(1990, 1999)</code></pre>
 <pre><code>## $`001`
 ## ~{
@@ -188,8 +217,10 @@ g &lt;- get_formula(5)</code></pre>
 ##     cur_step &lt;- (cur_time%%step_count) + 1L
 ##     cur_step_final &lt;- cur_step == step_count
 ## }
-## &lt;environment: 0x559ff54753d0&gt;</code></pre>
-<p>Like in the example above, the definitions are part of the formula’s environment, and if we compile it we see our years ending up in the code.</p>
+## &lt;environment: 0x55c15c001dc8&gt;</code></pre>
+<p>Like in the example above, the definitions are part of the formula’s
+environment, and if we compile it we see our years ending up in the
+code.</p>
 <pre class="r"><code>g3_to_r(g3a_time(1990, 1999))</code></pre>
 <pre><code>## function (param) 
 ## {
@@ -236,9 +267,11 @@ g &lt;- get_formula(5)</code></pre>
 ##         }
 ##     }
 ## }
-## &lt;bytecode: 0x559ff14c8390&gt;
-## &lt;environment: 0x559ff4a360b0&gt;</code></pre>
-<p>In this case our years have been hard-coded, but their definitions could themselves be formula and the end result will be added to the model. For example:</p>
+## &lt;bytecode: 0x55c15d286bb8&gt;
+## &lt;environment: 0x55c15d8ad528&gt;</code></pre>
+<p>In this case our years have been hard-coded, but their definitions
+could themselves be formula and the end result will be added to the
+model. For example:</p>
 <pre class="r"><code>g3_to_r(g3a_time(1990, ~start_year + 4 ))</code></pre>
 <pre><code>## function (param) 
 ## {
@@ -285,25 +318,43 @@ g &lt;- get_formula(5)</code></pre>
 ##         }
 ##     }
 ## }
-## &lt;bytecode: 0x559ff5426fb0&gt;
-## &lt;environment: 0x559ff5e7fe88&gt;</code></pre>
+## &lt;bytecode: 0x55c15ae5b9d0&gt;
+## &lt;environment: 0x55c15bdd7c68&gt;</code></pre>
 </div>
 <div id="stocks" class="section level2">
 <h2>Stocks</h2>
-<p>Beyond <code>g3a_time()</code>, pretty much any action will be describing changes to a stock, possibly via. interacting with another stock (or fleet). To keep track of this state, we use <em>g3_stock</em> objects. These describe several things:</p>
+<p>Beyond <code>g3a_time()</code>, pretty much any action will be
+describing changes to a stock, possibly via. interacting with another
+stock (or fleet). To keep track of this state, we use <em>g3_stock</em>
+objects. These describe several things:</p>
 <ul>
-<li>The dimensions one would use if making an array to store data on that stock. For example if we want an array for number of individuals, what lengthgroups do we use? How many ages do we store? How many (and which) areas do we have?</li>
-<li>What code do we need to iterate over the stock? Say I want to add 1 individual to each lengthgroup, how do I loop over all the other dimensions?</li>
-<li>If looping over one stock, how do I find corresponding entries in another stock? For example, my fleet is only interested in prey that is in the same area.</li>
+<li>The dimensions one would use if making an array to store data on
+that stock. For example if we want an array for number of individuals,
+what lengthgroups do we use? How many ages do we store? How many (and
+which) areas do we have?</li>
+<li>What code do we need to iterate over the stock? Say I want to add 1
+individual to each lengthgroup, how do I loop over all the other
+dimensions?</li>
+<li>If looping over one stock, how do I find corresponding entries in
+another stock? For example, my fleet is only interested in prey that is
+in the same area.</li>
 </ul>
-<p>g3_stock objects can be created with either <code>g3_stock()</code> or <code>g3_fleet()</code>, the former will store lengthgroups, which fleets do not have.</p>
-<p>Actions will store data about the stocks, for instance the current number of individuals, in arrays called stock instances. We can see what sort of arrays a stock will make by using <code>g3_stock_instance</code>:</p>
+<p>g3_stock objects can be created with either <code>g3_stock()</code>
+or <code>g3_fleet()</code>, the former will store lengthgroups, which
+fleets do not have.</p>
+<p>Actions will store data about the stocks, for instance the current
+number of individuals, in arrays called stock instances. We can see what
+sort of arrays a stock will make by using
+<code>g3_stock_instance</code>:</p>
 <pre class="r"><code>ling_imm &lt;- g3_stock(&#39;ling_imm&#39;, seq(0, 50, 10))
 g3_stock_instance(ling_imm)</code></pre>
 <pre><code>## length
 ##   0:10  10:20  20:30  30:40  40:50 50:Inf 
 ##     NA     NA     NA     NA     NA     NA</code></pre>
-<p>To add complexity to our model, we can use other <code>g3s_</code> functions, such as <code>g3s_livesonareas()</code> or <code>g3s_age()</code>, which adds area or age dimensions to a stock:</p>
+<p>To add complexity to our model, we can use other <code>g3s_</code>
+functions, such as <code>g3s_livesonareas()</code> or
+<code>g3s_age()</code>, which adds area or age dimensions to a
+stock:</p>
 <pre class="r"><code>ling_imm &lt;- g3_stock(&#39;ling_imm&#39;, seq(0, 50, 10)) %&gt;%
     g3s_age(3, 10)
 g3_stock_instance(ling_imm)</code></pre>
@@ -327,8 +378,15 @@ g3_stock_instance(ling_imm)[,,&#39;age3&#39;]</code></pre>
 ##   30:40     NA    NA
 ##   40:50     NA    NA
 ##   50:Inf    NA    NA</code></pre>
-<p>When you use an action such as <code>g3a_growmature()</code>, you provide g3_stock(s) to act on, and formula objects to fill in gaps in the code. <code>g3a_growmature()</code> will iterate over all areas/ages the stock has, and apply growth for each length group it finds.</p>
-<p><code>g3a_growmature()</code> itself doesn’t care about areas or age, it just does the same to each. However, the formula you supply can. <code>age</code> and <code>area</code> variables will be set with the current age/area, which you can use when writing formula. For example:</p>
+<p>When you use an action such as <code>g3a_growmature()</code>, you
+provide g3_stock(s) to act on, and formula objects to fill in gaps in
+the code. <code>g3a_growmature()</code> will iterate over all areas/ages
+the stock has, and apply growth for each length group it finds.</p>
+<p><code>g3a_growmature()</code> itself doesn’t care about areas or age,
+it just does the same to each. However, the formula you supply can.
+<code>age</code> and <code>area</code> variables will be set with the
+current age/area, which you can use when writing formula. For
+example:</p>
 <pre class="r"><code>fn &lt;- g3_to_r(g3a_growmature(
     ling_imm,
     impl_f = g3a_grow_impl_bbinom(
@@ -469,10 +527,14 @@ fn</code></pre>
 ##         }
 ##     }
 ## }
-## &lt;bytecode: 0x559ff5649df0&gt;
-## &lt;environment: 0x559ff5eba4f0&gt;</code></pre>
-<p>…you can see our provided formula have been used to calculate <code>ling_imm__growth_l</code> and <code>ling_imm__growth_w</code>, and <code>age</code> and <code>area</code> are available to us thanks to the loops provided by the stock.</p>
-<p>We can also define formulas and reference them. Gadget3 will add the definitions into the code where appropriate. For example:</p>
+## &lt;bytecode: 0x55c159e24788&gt;
+## &lt;environment: 0x55c15bee0d10&gt;</code></pre>
+<p>…you can see our provided formula have been used to calculate
+<code>ling_imm__growth_l</code> and <code>ling_imm__growth_w</code>, and
+<code>age</code> and <code>area</code> are available to us thanks to the
+loops provided by the stock.</p>
+<p>We can also define formulas and reference them. Gadget3 will add the
+definitions into the code where appropriate. For example:</p>
 <pre class="r"><code>custom_delta_l &lt;- ~area * 99
 custom_delta_w &lt;- ~ling_imm__plusdl * 44
 fn &lt;- g3_to_r(g3a_growmature(
@@ -624,18 +686,32 @@ fn</code></pre>
 ##         }
 ##     }
 ## }
-## &lt;bytecode: 0x559ff6514d98&gt;
-## &lt;environment: 0x559ff468a168&gt;</code></pre>
-<p>Note that <code>custom_delta_l</code> is recalculated every loop, since it uses <code>area</code>, whereas <code>custom_delta_w</code> is calculated once for the step.</p>
+## &lt;bytecode: 0x55c15b44cfd8&gt;
+## &lt;environment: 0x55c15bf38230&gt;</code></pre>
+<p>Note that <code>custom_delta_l</code> is recalculated every loop,
+since it uses <code>area</code>, whereas <code>custom_delta_w</code> is
+calculated once for the step.</p>
 </div>
 <div id="model-parameterization" class="section level2">
 <h2>Model parameterization</h2>
-<p>In the <code>g3a_growmature</code> function above, we see a reference to <code>g3_param(&quot;ling.bbin&quot;)</code>. The <code>g3_param()</code> function is pseudo-code that specifies the model should accept a parameter at this point. In the R code, this has been converted to <code>param[[&quot;ling.bbin&quot;]]</code>, so when we call our R function, we can provide a value, e.g. <code>fn(list(ling.bbin = 6))</code>. We can also use <code>g3_param_vector()</code> to provide a model with a vector of values. See <code>?g3_param</code> for more information on this and other functions available to you.</p>
-<p>When converting to TMB, there are a lot more options for using the optimisation features it offers.</p>
+<p>In the <code>g3a_growmature</code> function above, we see a reference
+to <code>g3_param(&quot;ling.bbin&quot;)</code>. The <code>g3_param()</code>
+function is pseudo-code that specifies the model should accept a
+parameter at this point. In the R code, this has been converted to
+<code>param[[&quot;ling.bbin&quot;]]</code>, so when we call our R function, we
+can provide a value, e.g. <code>fn(list(ling.bbin = 6))</code>. We can
+also use <code>g3_param_vector()</code> to provide a model with a vector
+of values. See <code>?g3_param</code> for more information on this and
+other functions available to you.</p>
+<p>When converting to TMB, there are a lot more options for using the
+optimisation features it offers.</p>
 </div>
 <div id="combining-actions" class="section level2">
 <h2>Combining actions</h2>
-<p>Any useful model will have multiple actions, so the outputs from the <code>g3a_</code> functions need to be combined. To do this, you can pass a list of actions to any of the <code>g3_to_*</code> functions, for example:</p>
+<p>Any useful model will have multiple actions, so the outputs from the
+<code>g3a_</code> functions need to be combined. To do this, you can
+pass a list of actions to any of the <code>g3_to_*</code> functions, for
+example:</p>
 <pre class="r"><code>ling_model &lt;- g3_to_r(list(
     g3a_age(ling_imm),
     g3a_growmature(
@@ -646,7 +722,8 @@ fn</code></pre>
             beta_f = ~g3_param(&quot;ling.bbin&quot;),
             maxlengthgroupgrowth = 4)),
     g3a_time(1990, 1999)))</code></pre>
-<p>A useful technique is to break down the actions into separate lists, e.g.</p>
+<p>A useful technique is to break down the actions into separate lists,
+e.g.</p>
 <pre class="r"><code>ling_imm_actions &lt;- list(
     g3a_age(ling_imm),
     g3a_growmature(
@@ -660,12 +737,18 @@ time_actions &lt;- list(
     g3a_time(1990, 1999))
 
 ling_model &lt;- g3_to_r(c(ling_imm_actions, time_actions))</code></pre>
-<p>Your actions can be combined in any order, the reasons for why are in the next section.</p>
+<p>Your actions can be combined in any order, the reasons for why are in
+the next section.</p>
 </div>
 <div id="ordering-of-actions" class="section level2">
 <h2>Ordering of actions</h2>
-<p>Gadget2 has a strict <a href="https://gadget-framework.github.io/gadget2/userguide/chap-order.html">Order of Calculations</a>, and re-ordering calculations may well have averse effects. Actions also have common steps to perform, for example overstocking for a prey has to be calculated, and calculated once, after each fleet has finished harvesting.</p>
-<p>To manage this, formulas within an action are labelled with a string, for example:</p>
+<p>Gadget2 has a strict <a href="https://gadget-framework.github.io/gadget2/userguide/chap-order.html">Order
+of Calculations</a>, and re-ordering calculations may well have averse
+effects. Actions also have common steps to perform, for example
+overstocking for a prey has to be calculated, and calculated once, after
+each fleet has finished harvesting.</p>
+<p>To manage this, formulas within an action are labelled with a string,
+for example:</p>
 <pre class="r"><code>lln &lt;- g3_fleet(&#39;lln&#39;) %&gt;% g3s_livesonareas(1)
 action &lt;- g3a_predate_fleet(
         lln,
@@ -687,19 +770,34 @@ names(action)</code></pre>
 ## [6] &quot;003:005:lln                 :ling_imm            &quot;                     
 ## [7] &quot;003:005:lln                 &quot;                                          
 ## [8] &quot;003:003:lln                 :ling_imm            &quot;</code></pre>
-<p>We see each step has a colon-separated name, including the following parts:</p>
+<p>We see each step has a colon-separated name, including the following
+parts:</p>
 <ul>
-<li>A number corresponding to the order of calculations. If you look at the gadget2 user-guide, consumption is step 3. This can be controlled using the <code>run_at</code> parameter of <code>g3a_predate_fleet()</code>, or any other action.</li>
-<li>Another number specifying the order within an action this step should be performed.</li>
+<li>A number corresponding to the order of calculations. If you look at
+the gadget2 user-guide, consumption is step 3. This can be controlled
+using the <code>run_at</code> parameter of
+<code>g3a_predate_fleet()</code>, or any other action.</li>
+<li>Another number specifying the order within an action this step
+should be performed.</li>
 <li>The prey and where relevant the fleet name</li>
-<li>A hash, that corresponds to the parameters of the <code>g3a_predate_fleet()</code> call.</li>
+<li>A hash, that corresponds to the parameters of the
+<code>g3a_predate_fleet()</code> call.</li>
 </ul>
-<p>When a G3 model is made, it will sort the combined list of steps by name, and remove duplicates by name. This means that:</p>
+<p>When a G3 model is made, it will sort the combined list of steps by
+name, and remove duplicates by name. This means that:</p>
 <ul>
 <li>Predation will happen at the correct part of the model cycle.</li>
-<li>Predation steps themselves will be ordered. So all defined predation steps will collect their catch (<code>003:001</code>) before overconsumption is calculated (<code>003:004</code>). There’s no explict process needed to interleave multiple predation actions.</li>
-<li>The overconsumption co-efficient for ling_imm will only be calculated once, regardless of the number of predation actions, since we will remove the duplicate versions of this step.</li>
-<li>Conversely the hash ensures that there are never duplicate versions of the main predation step, so could be repated. This is more relevant for renewal, where there can be multiple renewal actions working on the same stock.</li>
+<li>Predation steps themselves will be ordered. So all defined predation
+steps will collect their catch (<code>003:001</code>) before
+overconsumption is calculated (<code>003:004</code>). There’s no explict
+process needed to interleave multiple predation actions.</li>
+<li>The overconsumption co-efficient for ling_imm will only be
+calculated once, regardless of the number of predation actions, since we
+will remove the duplicate versions of this step.</li>
+<li>Conversely the hash ensures that there are never duplicate versions
+of the main predation step, so could be repated. This is more relevant
+for renewal, where there can be multiple renewal actions working on the
+same stock.</li>
 </ul>
 </div>
 

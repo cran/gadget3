@@ -1,4 +1,4 @@
-## ---- message=FALSE, echo=FALSE-----------------------------------------------
+## ----message=FALSE, echo=FALSE------------------------------------------------
 library(unittest)
 # Redirect ok() output to stderr
 options(unittest.output = stderr())
@@ -6,11 +6,11 @@ options(unittest.output = stderr())
 library(gadget3)
 set.seed(123)
 
-## ---- warning = FALSE, message = FALSE----------------------------------------
+## ----warning = FALSE, message = FALSE-----------------------------------------
 ### Modelling maturity & sex with multiple stocks
 
 
-## ---- warning = FALSE, message = FALSE----------------------------------------
+## ----warning = FALSE, message = FALSE-----------------------------------------
 library(gadget3)
 library(dplyr)
 
@@ -156,7 +156,7 @@ simple_model <- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
     catchability_f = g3a_predate_catchability_totalfleet(1) )))
 names(attr(simple_model, "parameter_template"))
 
-## ---- message=FALSE, echo=FALSE-----------------------------------------------
+## ----message=FALSE, echo=FALSE------------------------------------------------
 ok(ut_cmp_identical(sort(names(attr(simple_model, "parameter_template")), method = "radix"), c(
     "fish_imm.f_surv.alpha",
     "fish_imm.f_surv.l50",
@@ -173,7 +173,7 @@ simple_model <- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
     catchability_f = g3a_predate_catchability_totalfleet(1) )))
 names(attr(simple_model, "parameter_template"))
 
-## ---- message=FALSE, echo=FALSE-----------------------------------------------
+## ----message=FALSE, echo=FALSE------------------------------------------------
 ok(ut_cmp_identical(sort(names(attr(simple_model, "parameter_template")), method = "radix"), c(
     "fish.f_surv.alpha",
     "fish.f_surv.l50",
@@ -189,7 +189,7 @@ simple_model <- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
     catchability_f = g3a_predate_catchability_totalfleet(1) )))
 names(attr(simple_model, "parameter_template"))
 
-## ---- message=FALSE, echo=FALSE-----------------------------------------------
+## ----message=FALSE, echo=FALSE------------------------------------------------
 ok(ut_cmp_identical(sort(names(attr(simple_model, "parameter_template")), method = "radix"), c(
     "fish.f_surv.l50.1990",
     "fish.f_surv.l50.1991",
@@ -255,7 +255,7 @@ attr(model_code, "parameter_template") |>
   g3_init_val("*.bbin", 100, lower = 1e-05, upper = 1000) |>
   identity() -> params.in
 
-## ---- eval=nzchar(Sys.getenv('G3_TEST_TMB'))----------------------------------
+## ----eval=nzchar(Sys.getenv('G3_TEST_TMB'))-----------------------------------
 #  # Optimise model ################################
 #  obj.fn <- g3_tmb_adfun(model_code, params.in)
 #  
@@ -270,11 +270,11 @@ attr(model_code, "parameter_template") |>
 #      control = list(maxit = 1000, reltol = 1e-10),
 #      cv_floor = 0.05)
 
-## ---- eval=nzchar(Sys.getenv('G3_TEST_TMB'))----------------------------------
+## ----eval=nzchar(Sys.getenv('G3_TEST_TMB'))-----------------------------------
 #  # Generate detailed report ######################
 #  fit <- gadgetutils::g3_fit(model_code, params.out)
 #  gadgetplots::gadget_plots(fit, "figs", file_type = "html")
 
-## ---- eval=FALSE--------------------------------------------------------------
+## ----eval=FALSE---------------------------------------------------------------
 #  utils::browseURL("figs/model_output_figures.html")
 

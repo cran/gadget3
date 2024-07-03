@@ -1,4 +1,4 @@
-## ---- message=FALSE, echo=FALSE-----------------------------------------------
+## ----message=FALSE, echo=FALSE------------------------------------------------
 library(unittest)
 # Redirect ok() output to stderr
 options(unittest.output = stderr())
@@ -6,20 +6,20 @@ options(unittest.output = stderr())
 library(gadget3)
 set.seed(123)
 
-## ---- warning = FALSE, message = FALSE----------------------------------------
+## ----warning = FALSE, message = FALSE-----------------------------------------
 ### Introduction to gadget3: A single stock model
 
 
-## ---- eval=FALSE--------------------------------------------------------------
+## ----eval=FALSE---------------------------------------------------------------
 #  install.packages('gadget3')
 
-## ---- eval=FALSE--------------------------------------------------------------
+## ----eval=FALSE---------------------------------------------------------------
 #  install.packages('MFDB')
 #  remotes::install_github('gadget-framework/gadgetutils')
 #  remotes::install_github('gadget-framework/gadgetplots')
 #  remotes::install_github('gadget-framework/g3experiments')
 
-## ---- warning = FALSE, message = FALSE----------------------------------------
+## ----warning = FALSE, message = FALSE-----------------------------------------
 library(gadget3)
 library(dplyr)
 
@@ -36,10 +36,10 @@ actions_time <- list(
 
 actions <- c(actions, actions_time)
 
-## ---- comment = ''------------------------------------------------------------
+## ----comment = ''-------------------------------------------------------------
 g3_to_r(actions_time)
 
-## ---- comment = ''------------------------------------------------------------
+## ----comment = ''-------------------------------------------------------------
 g3_to_tmb(actions_time)
 
 ## -----------------------------------------------------------------------------
@@ -85,7 +85,7 @@ simple_fn <- g3_to_r(c(simple_actions, list(
 params <- attr(simple_fn, 'parameter_template')
 unlist(params)
 
-## ---- message=FALSE, echo=FALSE-----------------------------------------------
+## ----message=FALSE, echo=FALSE------------------------------------------------
 ok(ut_cmp_identical(sort(names(params), method = "radix"), c(
     "fish.K",
     "fish.Linf",
@@ -134,7 +134,7 @@ abund <- attr(simple_fn(params), "detail_fish__num")[,area = 'IXa', , time = '19
 par(mfrow=c(3, 2), mar = c(2,2,1,0))
 for (a in dimnames(abund)$age) barplot(abund[, age = a], main = a)
 
-## ---- message=FALSE, echo=FALSE-----------------------------------------------
+## ----message=FALSE, echo=FALSE------------------------------------------------
 # Make reporting is working
 abund <- attr(simple_fn(params), "detail_fish__num")[,area = 'IXa', , time = '1990-01']
 ok(ut_cmp_identical(dimnames(abund), list(
@@ -346,7 +346,7 @@ attr(model_code, "parameter_template") |>
   # identity() is a do-nothing function, but it lets us finish on a new line
   identity() -> params.in
 
-## ---- eval=nzchar(Sys.getenv('G3_TEST_TMB'))----------------------------------
+## ----eval=nzchar(Sys.getenv('G3_TEST_TMB'))-----------------------------------
 #  # Optimise model ################################
 #  obj.fn <- g3_tmb_adfun(model_code, params.in)
 #  
@@ -361,11 +361,11 @@ attr(model_code, "parameter_template") |>
 #      control = list(maxit = 1000, reltol = 1e-10),
 #      cv_floor = 0.05)
 
-## ---- eval=nzchar(Sys.getenv('G3_TEST_TMB'))----------------------------------
+## ----eval=nzchar(Sys.getenv('G3_TEST_TMB'))-----------------------------------
 #  # Generate detailed report ######################
 #  fit <- gadgetutils::g3_fit(model_code, params.out)
 #  gadgetplots::gadget_plots(fit, "figs", file_type = "html")
 
-## ---- eval=FALSE--------------------------------------------------------------
+## ----eval=FALSE---------------------------------------------------------------
 #  utils::browseURL("figs/model_output_figures.html")
 

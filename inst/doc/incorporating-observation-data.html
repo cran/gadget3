@@ -83,20 +83,27 @@ if (window.hljs) {
 
 
 
-<h1 class="title toc-ignore">Incorporating observation data into models</h1>
+<h1 class="title toc-ignore">Incorporating observation data into
+models</h1>
 
 
 <div id="TOC">
 <ul>
-<li><a href="#gadget2-gadget3-translation">gadget2&lt;-&gt;gadget3 translation</a></li>
+<li><a href="#gadget2-gadget3-translation">gadget2&lt;-&gt;gadget3
+translation</a></li>
 <li><a href="#observation-data-format">Observation data format</a>
 <ul>
-<li><a href="#weight-and-number-columns"><em>weight</em> and <em>number</em> columns</a></li>
-<li><a href="#year-and-step-columns-landings-abundance-indices"><em>year</em> and <em>step</em> columns: Landings, abundance indices</a></li>
-<li><a href="#length-column-length-distribution-data"><em>length</em> column: Length distribution data</a></li>
-<li><a href="#age-column-age-length-distribution-data"><em>age</em> column: Age-Length distribution data</a></li>
+<li><a href="#weight-and-number-columns"><em>weight</em> and
+<em>number</em> columns</a></li>
+<li><a href="#year-and-step-columns-landings-abundance-indices"><em>year</em>
+and <em>step</em> columns: Landings, abundance indices</a></li>
+<li><a href="#length-column-length-distribution-data"><em>length</em>
+column: Length distribution data</a></li>
+<li><a href="#age-column-age-length-distribution-data"><em>age</em>
+column: Age-Length distribution data</a></li>
 <li><a href="#area-column"><em>area</em> column</a></li>
-<li><a href="#stock-column-maturity-stage-distribution"><em>stock</em> column: Maturity stage distribution</a></li>
+<li><a href="#stock-column-maturity-stage-distribution"><em>stock</em>
+column: Maturity stage distribution</a></li>
 <li><a href="#fleet-column"><em>fleet</em> column</a></li>
 </ul></li>
 </ul>
@@ -112,14 +119,28 @@ if (window.hljs) {
   background-color: #f0f8ff !important;
 }
 </style>
-<p>Each run of a model will generate a likelihood score, by summing the result of any <em>likelihood actions</em> in the model together. To fit a model to observation data, we need to add a <em>likelihood action</em> that will compare observation data to the model.</p>
-<p>To do this you either need <code>g3l_catchdistribution()</code> or <code>g3l_abundancedistribution()</code>. As the names suggest, <code>g3l_catchdistribution()</code> will compare catch data of stocks from the provided fleets, <code>g3l_abundancedistribution()</code> will compare total abundance of stocks. Otherwise they are identical.</p>
+<p>Each run of a model will generate a likelihood score, by summing the
+result of any <em>likelihood actions</em> in the model together. To fit
+a model to observation data, we need to add a <em>likelihood action</em>
+that will compare observation data to the model.</p>
+<p>To do this you either need <code>g3l_catchdistribution()</code> or
+<code>g3l_abundancedistribution()</code>. As the names suggest,
+<code>g3l_catchdistribution()</code> will compare catch data of stocks
+from the provided fleets, <code>g3l_abundancedistribution()</code> will
+compare total abundance of stocks. Otherwise they are identical.</p>
 <p>This comparison is a 2 stage process:</p>
 <ol style="list-style-type: decimal">
-<li>Aggregation: The columns in the observation data are inspected, and converted into an array. Model data is then aggregated into an identically-sized array ready for the next step</li>
-<li>Comparison: A comparison function (<code>function_f</code>) is supplied to <code>g3l_*distribution()</code>, to convert to a likelihood score. For example <code>g3l_distribution_sumofsquares()</code>, which compares the relative abundance of each grouping vs. the model, and sums the square of these</li>
+<li>Aggregation: The columns in the observation data are inspected, and
+converted into an array. Model data is then aggregated into an
+identically-sized array ready for the next step</li>
+<li>Comparison: A comparison function (<code>function_f</code>) is
+supplied to <code>g3l_*distribution()</code>, to convert to a likelihood
+score. For example <code>g3l_distribution_sumofsquares()</code>, which
+compares the relative abundance of each grouping vs. the model, and sums
+the square of these</li>
 </ol>
-<p>We saw the following example in <code>vignette(&quot;introduction-single-stock&quot;)</code>:</p>
+<p>We saw the following example in
+<code>vignette(&quot;introduction-single-stock&quot;)</code>:</p>
 <div class="modelScript">
 <pre class="r"><code># TODO: This isn&#39;t a brilliantly-named example, something else?
 # Generate random data
@@ -141,53 +162,88 @@ actions_likelihood_si_acoustic &lt;- list(
     nll_breakdown = TRUE),
   NULL)</code></pre>
 </div>
-<p>The first step generates random observation data. We have the following columns:</p>
+<p>The first step generates random observation data. We have the
+following columns:</p>
 <ul>
-<li><em>year</em>: We want to do comparisons in 5 years, 1990..1994. Other years nothing will happen.</li>
+<li><em>year</em>: We want to do comparisons in 5 years, 1990..1994.
+Other years nothing will happen.</li>
 <li><em>step</em>: We compare abundance in the autumn step</li>
 <li><em>area</em>: We only compare with stock within the ‘IXa’ area</li>
 <li><em>number</em>: We compare against number individuals.</li>
 </ul>
-<p>There are no <em>age</em> or <em>length</em> columns, so this is total abundance within that area/time.</p>
-<p>We use <code>g3l_distribution_surveyindices_log()</code>, which calculates the likelihood score by performing a linear fit using the log scale, the slope (<em>beta</em>) is fixed.</p>
-<p>The model optimisation process will minimise the total likelihood score, and in the process fit the model to the observation data.</p>
+<p>There are no <em>age</em> or <em>length</em> columns, so this is
+total abundance within that area/time.</p>
+<p>We use <code>g3l_distribution_surveyindices_log()</code>, which
+calculates the likelihood score by performing a linear fit using the log
+scale, the slope (<em>beta</em>) is fixed.</p>
+<p>The model optimisation process will minimise the total likelihood
+score, and in the process fit the model to the observation data.</p>
 <div id="gadget2-gadget3-translation" class="section level2">
 <h2>gadget2&lt;-&gt;gadget3 translation</h2>
-<p>The function of many of gadget2’s likeihood components has been collapsed down into these 2 functions. Here is a summary of how to translate:</p>
+<p>The function of many of gadget2’s likeihood components has been
+collapsed down into these 2 functions. Here is a summary of how to
+translate:</p>
 <ul>
-<li><a href="https://gadget-framework.github.io/gadget2/userguide/chap-like.html#sec-catchdist">CatchDistribution</a> likelihood component
+<li><a href="https://gadget-framework.github.io/gadget2/userguide/chap-like.html#sec-catchdist">CatchDistribution</a>
+likelihood component
 <ul>
 <li>Use <code>g3l_catchdistribution()</code></li>
-<li>Set <em>function_f</em> parameter to the matching <code>g3l_distribution_*()</code> function, e.g. <code>g3l_distribution_sumofsquares()</code></li>
-<li>Supply data with columns <em>year</em>, <em>step</em>, <em>area</em>, <em>age</em>, <em>length</em>, <em>number</em></li>
+<li>Set <em>function_f</em> parameter to the matching
+<code>g3l_distribution_*()</code> function,
+e.g. <code>g3l_distribution_sumofsquares()</code></li>
+<li>Supply data with columns <em>year</em>, <em>step</em>,
+<em>area</em>, <em>age</em>, <em>length</em>, <em>number</em></li>
 </ul></li>
-<li><a href="https://gadget-framework.github.io/gadget2/userguide/chap-like.html#sec-surveyindices">SurveyIndices</a> likelihood component
+<li><a href="https://gadget-framework.github.io/gadget2/userguide/chap-like.html#sec-surveyindices">SurveyIndices</a>
+likelihood component
 <ul>
 <li>Use <code>g3l_abundancedistribution()</code></li>
-<li>Set <em>function_f</em> parameter to <code>g3l_distribution_surveyindices_log()</code> or <code>g3l_distribution_surveyindices_linear()</code></li>
-<li>Supply data with columns <em>year</em>, <em>step</em>, <em>area</em>, <em>length</em>, <em>number</em></li>
+<li>Set <em>function_f</em> parameter to
+<code>g3l_distribution_surveyindices_log()</code> or
+<code>g3l_distribution_surveyindices_linear()</code></li>
+<li>Supply data with columns <em>year</em>, <em>step</em>,
+<em>area</em>, <em>length</em>, <em>number</em></li>
 </ul></li>
-<li><a href="https://gadget-framework.github.io/gadget2/userguide/chap-like.html#sec-catchinkilos">CatchInKilos</a> likelihood component
+<li><a href="https://gadget-framework.github.io/gadget2/userguide/chap-like.html#sec-catchinkilos">CatchInKilos</a>
+likelihood component
 <ul>
-<li>Use <code>g3l_catchdistribution(function_f = g3l_distribution_sumofsquares())</code></li>
-<li>Supply data with columns <em>year</em>, <em>step</em>, <em>area</em>, <em>fleet</em>, <em>weight</em></li>
+<li>Use
+<code>g3l_catchdistribution(function_f = g3l_distribution_sumofsquares())</code></li>
+<li>Supply data with columns <em>year</em>, <em>step</em>,
+<em>area</em>, <em>fleet</em>, <em>weight</em></li>
 </ul></li>
 </ul>
 </div>
 <div id="observation-data-format" class="section level2">
 <h2>Observation data format</h2>
-<p>gadget3 bases it’s decision on how to aggregate on the incoming data. Whilst it tries to do the “right thing” in most cases, it’s important to get the shape of this data to match what you require.</p>
-<p>In doing so, the incoming <code>data.frame()</code> is converted into an <code>array()</code>. We can use the <code>g3_distribution_preview()</code> function to see what that array will look like, and in doing so see how gadget3 will treat the observation data.</p>
-<p>Critically, your data needs to have column names it recognises. The following breaks down what can be by each column.</p>
+<p>gadget3 bases it’s decision on how to aggregate on the incoming data.
+Whilst it tries to do the “right thing” in most cases, it’s important to
+get the shape of this data to match what you require.</p>
+<p>In doing so, the incoming <code>data.frame()</code> is converted into
+an <code>array()</code>. We can use the
+<code>g3_distribution_preview()</code> function to see what that array
+will look like, and in doing so see how gadget3 will treat the
+observation data.</p>
+<p>Critically, your data needs to have column names it recognises. The
+following breaks down what can be by each column.</p>
 <div id="weight-and-number-columns" class="section level3">
 <h3><em>weight</em> and <em>number</em> columns</h3>
-<p>At least a <em>weight</em> or <em>number</em> column needs to be supplied. If a <em>number</em> column is present then each value will be compared to number of individuals in that group. If a <em>weight</em> column is present then each value will be compared to total biomass in that group.</p>
-<p>The <em>weight</em> is suitable for total catches in kilos, otherwise the <em>number</em> column will generally be used.</p>
+<p>At least a <em>weight</em> or <em>number</em> column needs to be
+supplied. If a <em>number</em> column is present then each value will be
+compared to number of individuals in that group. If a <em>weight</em>
+column is present then each value will be compared to total biomass in
+that group.</p>
+<p>The <em>weight</em> is suitable for total catches in kilos, otherwise
+the <em>number</em> column will generally be used.</p>
 </div>
 <div id="year-and-step-columns-landings-abundance-indices" class="section level3">
-<h3><em>year</em> and <em>step</em> columns: Landings, abundance indices</h3>
-<p>If a <em>year</em> column is given, then catch/abundance will be aggregated by year. Gaps are allowed, if so then no comparisons will be made for that year/step.</p>
-<p>The following observations will be compared against the total number of indivduals caught in years 1999, 2000, 2002, 2003:</p>
+<h3><em>year</em> and <em>step</em> columns: Landings, abundance
+indices</h3>
+<p>If a <em>year</em> column is given, then catch/abundance will be
+aggregated by year. Gaps are allowed, if so then no comparisons will be
+made for that year/step.</p>
+<p>The following observations will be compared against the total number
+of indivduals caught in years 1999, 2000, 2002, 2003:</p>
 <pre class="r"><code>g3_distribution_preview(read.table(header = TRUE, text=&quot;
 year  number
 1999    1000
@@ -198,8 +254,12 @@ year  number
 <pre><code>##        time
 ## length  1999 2000 2002 2003
 ##   0:Inf 1000 1002 1004 1008</code></pre>
-<p>If <em>step</em> is given, then it will restrict it to that step within the year (see <code>?g3a_time</code> for how to define steps in a year).</p>
-<p>In the following example, we will aggregate <strong>spring</strong> of 1999 &amp; 2000, <strong>autumn</strong> of 2001. Any catch in spring of 2001, or other periods not mentioned, will be ignored:</p>
+<p>If <em>step</em> is given, then it will restrict it to that step
+within the year (see <code>?g3a_time</code> for how to define steps in a
+year).</p>
+<p>In the following example, we will aggregate <strong>spring</strong>
+of 1999 &amp; 2000, <strong>autumn</strong> of 2001. Any catch in spring
+of 2001, or other periods not mentioned, will be ignored:</p>
 <pre class="r"><code>g3_distribution_preview(read.table(header = TRUE, text=&quot;
 year step number
 1999    2   1020
@@ -212,7 +272,8 @@ year step number
 </div>
 <div id="length-column-length-distribution-data" class="section level3">
 <h3><em>length</em> column: Length distribution data</h3>
-<p>Adding a length column will aggregate catch/abundance data by the same length bins as in the observation data.</p>
+<p>Adding a length column will aggregate catch/abundance data by the
+same length bins as in the observation data.</p>
 <p>For instance:</p>
 <pre class="r"><code>g3_distribution_preview(read.table(header = TRUE, text=&quot;
 year  length number
@@ -231,8 +292,15 @@ year  length number
 ##   10:20 2938 2938
 ##   20:30 3948   NA
 ##   30:40 3855 3855</code></pre>
-<p>Note that unlike with the <em>year</em> &amp; <em>step</em> columns, here gaps in data are preserved, in the preview output we see <code>NA</code> for the missing <em>year</em> &amp; <em>length</em> combination. By default we will compare to <code>0</code> at this point, this behaviour is controlled with the <em>missing_val</em> parameter to <code>?g3l_catchdistribution</code>.</p>
-<p>Length aggregations do not have to be hand-crafted like we do above, a length column could be generated using <code>dplyr::group_by()</code> and <code>cut()</code>:</p>
+<p>Note that unlike with the <em>year</em> &amp; <em>step</em> columns,
+here gaps in data are preserved, in the preview output we see
+<code>NA</code> for the missing <em>year</em> &amp; <em>length</em>
+combination. By default we will compare to <code>0</code> at this point,
+this behaviour is controlled with the <em>missing_val</em> parameter to
+<code>?g3l_catchdistribution</code>.</p>
+<p>Length aggregations do not have to be hand-crafted like we do above,
+a length column could be generated using <code>dplyr::group_by()</code>
+and <code>cut()</code>:</p>
 <pre class="r"><code># Generate an unaggregated length distribution
 ldist.lln.raw &lt;- data.frame(
     year = c(1999, 2000),
@@ -278,7 +346,8 @@ g3_distribution_preview(ldist.lln.agg)</code></pre>
 ##   70:80     1    2
 ##   80:90    NA   NA
 ##   90:100   NA   NA</code></pre>
-<p>gadget3 will also automatically read the aggregation attributes used by <code>?mfdb::mfdb_sample_count</code>.</p>
+<p>gadget3 will also automatically read the aggregation attributes used
+by <code>?mfdb::mfdb_sample_count</code>.</p>
 <pre class="r"><code># Import data into a temporary database
 library(mfdb)
 mdb &lt;- mfdb(tempfile(fileext=&quot;.duckdb&quot;))
@@ -297,7 +366,8 @@ mfdb_disconnect(mdb)</code></pre>
 </div>
 <div id="age-column-age-length-distribution-data" class="section level3">
 <h3><em>age</em> column: Age-Length distribution data</h3>
-<p>Age-length aggregations can be performed by adding an <em>age</em> column in a very similar manner to the <em>length</em> column:</p>
+<p>Age-length aggregations can be performed by adding an <em>age</em>
+column in a very similar manner to the <em>length</em> column:</p>
 <p>We can both group by individual age values:</p>
 <pre class="r"><code>g3_distribution_preview(read.table(header = TRUE, text=&quot;
 year  age  length number
@@ -338,12 +408,16 @@ year  age    length number
 ##   10:20 2936   NA
 ##   20:30 3962 3946
 ##   30:40 3863 3872</code></pre>
-<p>As before, gaps in data are preserved, and <code>missing_val</code> is used to decide what to do with them.</p>
-<p>Again, gadget3 will also interpret aggregation generated by <code>group_by(age = cut(...))</code> or <code>?mfdb::mfdb_sample_count</code>.</p>
+<p>As before, gaps in data are preserved, and <code>missing_val</code>
+is used to decide what to do with them.</p>
+<p>Again, gadget3 will also interpret aggregation generated by
+<code>group_by(age = cut(...))</code> or
+<code>?mfdb::mfdb_sample_count</code>.</p>
 </div>
 <div id="area-column" class="section level3">
 <h3><em>area</em> column</h3>
-<p>If a stock is divided up into multiple areas, then data can be broken down by area</p>
+<p>If a stock is divided up into multiple areas, then data can be broken
+down by area</p>
 <pre class="r"><code>area_names &lt;- g3_areas(c(&#39;IXa&#39;, &#39;IXb&#39;, &#39;IXc&#39;))
 
 g3_distribution_preview(read.table(header = TRUE, text=&quot;
@@ -359,12 +433,17 @@ year    area    number
 ##   1999 1000 4305
 ##   2000 7034 2381
 ##   2001   NA 3913</code></pre>
-<p>As before, gaps in data are preserved, and <code>missing_val</code> is used to decide what to do with them.</p>
-<p>However, if an area isn’t mentioned at all (note that <code>IXc</code> does not figure in the above data), then it won’t be compared.</p>
+<p>As before, gaps in data are preserved, and <code>missing_val</code>
+is used to decide what to do with them.</p>
+<p>However, if an area isn’t mentioned at all (note that
+<code>IXc</code> does not figure in the above data), then it won’t be
+compared.</p>
 </div>
 <div id="stock-column-maturity-stage-distribution" class="section level3">
 <h3><em>stock</em> column: Maturity stage distribution</h3>
-<p>If you have multiple stocks, for example because you have divided up your species into mature and immature substocks, you can use this division in likelihood components also:</p>
+<p>If you have multiple stocks, for example because you have divided up
+your species into mature and immature substocks, you can use this
+division in likelihood components also:</p>
 <pre class="r"><code>st_imm &lt;- g3_stock(c(species = &#39;fish&#39;, &#39;imm&#39;), 1:10)
 st_mat &lt;- g3_stock(c(species = &#39;fish&#39;, &#39;mat&#39;), 1:10)
 
@@ -380,8 +459,10 @@ year    stock    number
 ## stock      1999 2000 2001
 ##   fish_imm 1000 7034   NA
 ##   fish_mat 4305 2381 3913</code></pre>
-<p>The stock names have to match what gadget3 uses, or an error will be generated.</p>
-<p>As before, gaps in data are preserved, and <code>missing_val</code> is used to decide what to do with them.</p>
+<p>The stock names have to match what gadget3 uses, or an error will be
+generated.</p>
+<p>As before, gaps in data are preserved, and <code>missing_val</code>
+is used to decide what to do with them.</p>
 </div>
 <div id="fleet-column" class="section level3">
 <h3><em>fleet</em> column</h3>
@@ -400,8 +481,10 @@ year    fleet    number
 ## fleet    1999 2000 2001
 ##   f_comm 1000 7034   NA
 ##   f_surv 4305 2381 3913</code></pre>
-<p>The stock names have to match what gadget3 uses, or an error will be generated.</p>
-<p>As before, gaps in data are preserved, and <code>missing_val</code> is used to decide what to do with them.</p>
+<p>The stock names have to match what gadget3 uses, or an error will be
+generated.</p>
+<p>As before, gaps in data are preserved, and <code>missing_val</code>
+is used to decide what to do with them.</p>
 </div>
 </div>
 

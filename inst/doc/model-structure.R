@@ -1,4 +1,4 @@
-## ---- message=FALSE, echo=FALSE-----------------------------------------------
+## ----message=FALSE, echo=FALSE------------------------------------------------
 library(gadget3)
 library(magrittr)
 

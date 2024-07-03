@@ -90,9 +90,11 @@ if (window.hljs) {
 <ul>
 <li><a href="#spawning">Spawning</a>
 <ul>
-<li><a href="#creating-model-functions-and-parameterization">Creating model functions and Parameterization</a></li>
+<li><a href="#creating-model-functions-and-parameterization">Creating
+model functions and Parameterization</a></li>
 </ul></li>
-<li><a href="#appendix-full-model-script">Appendix: Full model script</a></li>
+<li><a href="#appendix-full-model-script">Appendix: Full model
+script</a></li>
 </ul>
 </div>
 
@@ -109,13 +111,18 @@ if (window.hljs) {
 <div class="alert alert-warning">
 <p><strong>NB:</strong> This vignette is a work in progress</p>
 </div>
-<p>This vignette walks through a script that will generate a gadget3 model, explaining concepts along the way.</p>
-<p>Code blocks that make up the gadget3 script are marked in blue, like this:</p>
+<p>This vignette walks through a script that will generate a gadget3
+model, explaining concepts along the way.</p>
+<p>Code blocks that make up the gadget3 script are marked in blue, like
+this:</p>
 <div class="modelScript">
 <pre class="r"><code>### Spawning &amp; Random effects</code></pre>
 </div>
-<p>We only show the blocks that are relevant to implementing random effects, see <a href="#appendix-full-model-script">the appendix for the entire script</a>.</p>
-<p>For an explanation of other parts of the script, see previous vignettes.</p>
+<p>We only show the blocks that are relevant to implementing random
+effects, see <a href="#appendix-full-model-script">the appendix for the
+entire script</a>.</p>
+<p>For an explanation of other parts of the script, see previous
+vignettes.</p>
 <div class="modelScript hide">
 <pre class="r"><code>library(gadget3)
 library(dplyr)
@@ -146,10 +153,17 @@ stocks = list(imm = st_imm, mat = st_mat)</code></pre>
 </div>
 <div id="spawning" class="section level2">
 <h2>Spawning</h2>
-<p>In <code>vignette(&quot;introduction-single-stock&quot;)</code> we introduced <code>g3a_renewal_normalparam()</code> as a means of adding recruitment into the model.</p>
-<p>An alternative action is <code>g3a_spawn()</code>. The main difference here is the existing state of the stock is used to inform the rate of recruitment.</p>
-<p>To improve our model fit, we shall define the rate of spawning using a random walk.</p>
-<p>Firstly, we define our immature stock. There’s no real difference here, apart from <code>g3a_renewal_normalparam()</code> no longer being present:</p>
+<p>In <code>vignette(&quot;introduction-single-stock&quot;)</code> we introduced
+<code>g3a_renewal_normalparam()</code> as a means of adding recruitment
+into the model.</p>
+<p>An alternative action is <code>g3a_spawn()</code>. The main
+difference here is the existing state of the stock is used to inform the
+rate of recruitment.</p>
+<p>To improve our model fit, we shall define the rate of spawning using
+a random walk.</p>
+<p>Firstly, we define our immature stock. There’s no real difference
+here, apart from <code>g3a_renewal_normalparam()</code> no longer being
+present:</p>
 <div class="modelScript">
 <pre class="r"><code>actions_st_imm &lt;- list(
   g3a_growmature(st_imm,
@@ -166,7 +180,8 @@ stocks = list(imm = st_imm, mat = st_mat)</code></pre>
   NULL)
 actions &lt;- c(actions, actions_st_imm)</code></pre>
 </div>
-<p>Next, we need to define the set of parameters that will constitute our random walk:</p>
+<p>Next, we need to define the set of parameters that will constitute
+our random walk:</p>
 <div class="modelScript">
 <pre class="r"><code># Configure our random walk for mu
 st_spawn_mu &lt;- g3_parameterized(&#39;spawn_mu&#39;,
@@ -174,9 +189,16 @@ st_spawn_mu &lt;- g3_parameterized(&#39;spawn_mu&#39;,
     scale = g3_parameterized(&#39;spawn_mu_seasonal&#39;, by_step = TRUE, value = 1, optimise = FALSE),
     random = TRUE)</code></pre>
 </div>
-<p>As we saw in <code>vignette(&#39;multiple-substocks&#39;)</code>, <code>by_year</code> will give us a series of parameters for <code>spawn_mu</code>, one per year. <code>random = TRUE</code> will ensure that these parameters have TRUE in the <em>random</em> column in the parameter template.</p>
-<p>The <code>scale</code> parameter adds seasonal variation parameters, <code>spawn_mu_seasonal.1</code>..<code>spawn_mu_seasonal.4</code>, which can be used to control when spawning happens.</p>
-<p>We store this as a separate variable as we need to use it in 2 places. First, when we configure our spawning action:</p>
+<p>As we saw in <code>vignette(&#39;multiple-substocks&#39;)</code>,
+<code>by_year</code> will give us a series of parameters for
+<code>spawn_mu</code>, one per year. <code>random = TRUE</code> will
+ensure that these parameters have TRUE in the <em>random</em> column in
+the parameter template.</p>
+<p>The <code>scale</code> parameter adds seasonal variation parameters,
+<code>spawn_mu_seasonal.1</code>..<code>spawn_mu_seasonal.4</code>,
+which can be used to control when spawning happens.</p>
+<p>We store this as a separate variable as we need to use it in 2
+places. First, when we configure our spawning action:</p>
 <div class="modelScript">
 <pre class="r"><code>actions_st_mat &lt;- list(
   g3a_growmature(st_mat,
@@ -195,8 +217,13 @@ st_spawn_mu &lt;- g3_parameterized(&#39;spawn_mu&#39;,
   NULL)
 actions &lt;- c(actions, actions_st_mat)</code></pre>
 </div>
-<p>Mature stocks spawn, their output going into the immature stock. We use suitability functions to define <code>proportion_f</code>, the proportion of stock ready to spawn, <code>by_step</code> meaning this proportion is seasonal. Our random walk is used as the rate of recruitment, <em>mu</em>.</p>
-<p>Next we use a likelihood action to constrain the values in the random walk during optimisation:</p>
+<p>Mature stocks spawn, their output going into the immature stock. We
+use suitability functions to define <code>proportion_f</code>, the
+proportion of stock ready to spawn, <code>by_step</code> meaning this
+proportion is seasonal. Our random walk is used as the rate of
+recruitment, <em>mu</em>.</p>
+<p>Next we use a likelihood action to constrain the values in the random
+walk during optimisation:</p>
 <div class="modelScript">
 <pre class="r"><code>actions_likelihood_st &lt;- list(
   g3l_understocking(stocks, nll_breakdown = TRUE),
@@ -212,7 +239,12 @@ actions &lt;- c(actions, actions_st_mat)</code></pre>
   NULL)
 actions &lt;- c(actions, actions_likelihood_st)</code></pre>
 </div>
-<p>For random effects to be useful, they have to be constrained to sensible bounds. There are 2 likelihood actions that help with this, <code>g3l_random_dnorm()</code> &amp; <code>g3l_random_walk()</code>. The former penalises random values that stray outside given normal distribution, the latter constrains along a random walk; the current year’s value should not vary significantly from the previous.</p>
+<p>For random effects to be useful, they have to be constrained to
+sensible bounds. There are 2 likelihood actions that help with this,
+<code>g3l_random_dnorm()</code> &amp; <code>g3l_random_walk()</code>.
+The former penalises random values that stray outside given normal
+distribution, the latter constrains along a random walk; the current
+year’s value should not vary significantly from the previous.</p>
 <div class="modelScript hide">
 <pre class="r"><code># Fleet data for f_surv #################################
 
@@ -357,7 +389,12 @@ attr(model_code, &quot;parameter_template&quot;) |&gt;
 #params.in[params.in$random, &#39;optimise&#39;] &lt;- TRUE
 #params.in[params.in$random, &#39;random&#39;] &lt;- FALSE</code></pre>
 </div>
-<p>Finally we are ready for optimisation runs. <code>g3_tmb_adfun()</code> is a wrapper around <code>TMB::MakeADFun()</code> and <code>TMB::compile</code>, producing a TMB <em>objective function</em>. <code>gadgetutils::g3_iterative()</code> then optimises based on iterative reweighting</p>
+<p>Finally we are ready for optimisation runs.
+<code>g3_tmb_adfun()</code> is a wrapper around
+<code>TMB::MakeADFun()</code> and <code>TMB::compile</code>, producing a
+TMB <em>objective function</em>.
+<code>gadgetutils::g3_iterative()</code> then optimises based on
+iterative reweighting</p>
 <div class="modelScript">
 <pre class="r"><code># Optimise model ################################
 obj.fn &lt;- g3_tmb_adfun(model_code, params.in, inner.control = list(trace = 3, maxit = 100))
@@ -375,7 +412,8 @@ fit &lt;- gadgetutils::g3_fit(model_code, params.out)</code></pre>
 </div>
 <div id="appendix-full-model-script" class="section level2">
 <h2>Appendix: Full model script</h2>
-<p>For convenience, here is all the sections of the model script above joined together:</p>
+<p>For convenience, here is all the sections of the model script above
+joined together:</p>
 <script>
 document.write(
     '<div class="modelScript"><div class="sourceCode hasCopyButton"><pre class="downlit sourceCode r">' +

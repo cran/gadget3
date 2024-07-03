@@ -1,4 +1,4 @@
-## ---- message=FALSE, echo=FALSE-----------------------------------------------
+## ----message=FALSE, echo=FALSE------------------------------------------------
 library(unittest)
 # Redirect ok() output to stderr
 options(unittest.output = stderr())
@@ -6,11 +6,11 @@ options(unittest.output = stderr())
 library(gadget3)
 set.seed(123)
 
-## ---- warning = FALSE, message = FALSE----------------------------------------
+## ----warning = FALSE, message = FALSE-----------------------------------------
 ### Spawning & Random effects
 
 
-## ---- warning = FALSE, message = FALSE----------------------------------------
+## ----warning = FALSE, message = FALSE-----------------------------------------
 library(gadget3)
 library(dplyr)
 
@@ -235,7 +235,7 @@ attr(model_code, "parameter_template") |>
 #params.in[params.in$random, 'optimise'] <- TRUE
 #params.in[params.in$random, 'random'] <- FALSE
 
-## ---- eval=nzchar(Sys.getenv('G3_TEST_TMB'))----------------------------------
+## ----eval=nzchar(Sys.getenv('G3_TEST_TMB'))-----------------------------------
 #  # Optimise model ################################
 #  obj.fn <- g3_tmb_adfun(model_code, params.in, inner.control = list(trace = 3, maxit = 100))
 #  

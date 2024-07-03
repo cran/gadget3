@@ -83,7 +83,8 @@ if (window.hljs) {
 
 
 
-<h1 class="title toc-ignore">Modelling maturity &amp; sex with multiple stocks</h1>
+<h1 class="title toc-ignore">Modelling maturity &amp; sex with multiple
+stocks</h1>
 
 
 <div id="TOC">
@@ -94,9 +95,11 @@ if (window.hljs) {
 <li><a href="#stock-actions">Stock actions</a></li>
 <li><a href="#fleet-actions">Fleet actions</a></li>
 <li><a href="#survey-indices">Survey indices</a></li>
-<li><a href="#creating-model-functions-and-parameterization">Creating model functions and Parameterization</a></li>
+<li><a href="#creating-model-functions-and-parameterization">Creating
+model functions and Parameterization</a></li>
 </ul></li>
-<li><a href="#appendix-full-model-script">Appendix: Full model script</a></li>
+<li><a href="#appendix-full-model-script">Appendix: Full model
+script</a></li>
 </ul>
 </div>
 
@@ -106,17 +109,26 @@ if (window.hljs) {
   background-color: #f0f8ff !important;
 }
 </style>
-<p>This vignette walks through a script that will generate a gadget3 model, explaining concepts along the way.</p>
-<p>Code blocks that make up the gadget3 script are marked in blue, like this:</p>
+<p>This vignette walks through a script that will generate a gadget3
+model, explaining concepts along the way.</p>
+<p>Code blocks that make up the gadget3 script are marked in blue, like
+this:</p>
 <div class="modelScript">
 <pre class="r"><code>### Modelling maturity &amp; sex with multiple stocks</code></pre>
 </div>
-<p>When combined they will form a full model, see <a href="#appendix-full-model-script">the appendix for the entire script</a>.</p>
+<p>When combined they will form a full model, see <a href="#appendix-full-model-script">the appendix for the entire
+script</a>.</p>
 <div id="stocks-substocks" class="section level2">
 <h2>Stocks &amp; substocks</h2>
-<p>As mentioned before in <code>vignette(&#39;introduction-single-stock&#39;)</code>, gadget3 stock objects do not have to correspond 1:1 with a species.</p>
-<p>We can have multiple stock objects representing the same species in a different stage in their life-cycle, most commonly <code>mature</code> and <code>immature</code> versions, <code>male</code> and <code>female</code> versions, or all 4.</p>
-<p>The set up is much the same as before, but major differences will be highlighted.</p>
+<p>As mentioned before in
+<code>vignette(&#39;introduction-single-stock&#39;)</code>, gadget3 stock
+objects do not have to correspond 1:1 with a species.</p>
+<p>We can have multiple stock objects representing the same species in a
+different stage in their life-cycle, most commonly <code>mature</code>
+and <code>immature</code> versions, <code>male</code> and
+<code>female</code> versions, or all 4.</p>
+<p>The set up is much the same as before, but major differences will be
+highlighted.</p>
 <p>Initial setup &amp; time-keeping is identical:</p>
 <div class="modelScript">
 <pre class="r"><code>library(gadget3)
@@ -137,7 +149,8 @@ actions &lt;- c(actions, actions_time)</code></pre>
 </div>
 <div id="stocks" class="section level3">
 <h3>Stocks</h3>
-<p>We define 2 stocks instead of one, and a <code>list()</code> containing both for convenience:</p>
+<p>We define 2 stocks instead of one, and a <code>list()</code>
+containing both for convenience:</p>
 <div class="modelScript">
 <pre class="r"><code># Create stock definition for fish ####################
 st_imm &lt;- g3_stock(c(species = &quot;fish&quot;, &#39;imm&#39;), seq(5L, 25L, 5)) |&gt;
@@ -151,13 +164,17 @@ stocks = list(imm = st_imm, mat = st_mat)</code></pre>
 </div>
 <p>Notice that:</p>
 <ul>
-<li>The name of the stock has 2 parts. This makes it possible to have parameters that refer to the species as a whole. In the model output the names will have been combined, e.g. <code>&quot;fish_imm&quot;</code>.</li>
-<li>The age ranges are not identical, obviously mature stocks are older, and we adjust to suit.</li>
+<li>The name of the stock has 2 parts. This makes it possible to have
+parameters that refer to the species as a whole. In the model output the
+names will have been combined, e.g. <code>&quot;fish_imm&quot;</code>.</li>
+<li>The age ranges are not identical, obviously mature stocks are older,
+and we adjust to suit.</li>
 </ul>
 </div>
 <div id="stock-actions" class="section level3">
 <h3>Stock actions</h3>
-<p>Stock actions now need to include interactions between immature &amp; mature:</p>
+<p>Stock actions now need to include interactions between immature &amp;
+mature:</p>
 <div class="modelScript">
 <pre class="r"><code>actions_st_imm &lt;- list(
   g3a_growmature(st_imm,
@@ -188,17 +205,27 @@ actions_likelihood_st &lt;- list(
 
 actions &lt;- c(actions, actions_st_imm, actions_st_mat, actions_likelihood_st)</code></pre>
 </div>
-<p><code>actions_st_imm</code> and <code>actions_st_imm</code> are largely similar to our <code>actions_fish</code> from the previous model, but:</p>
+<p><code>actions_st_imm</code> and <code>actions_st_imm</code> are
+largely similar to our <code>actions_fish</code> from the previous
+model, but:</p>
 <ul>
-<li>We have added a <code>maturity_f</code> to <code>g3a_growmature()</code> to move individuals to the mature stock. The rate of maturity is coupled to growth, which is why <code>g3a_growmature()</code> does both at the same time.</li>
-<li>Immature <code>g3a_age()</code> can also move individuals to the mature stock. This will happen if an immature fish ages beyond the final age bin (5 in our case). At that point it matures “by default”.</li>
-<li>Mature has no <code>g3a_renewal_normalparam()</code>, as there is no recruitment directly into the mature stock.</li>
+<li>We have added a <code>maturity_f</code> to
+<code>g3a_growmature()</code> to move individuals to the mature stock.
+The rate of maturity is coupled to growth, which is why
+<code>g3a_growmature()</code> does both at the same time.</li>
+<li>Immature <code>g3a_age()</code> can also move individuals to the
+mature stock. This will happen if an immature fish ages beyond the final
+age bin (5 in our case). At that point it matures “by default”.</li>
+<li>Mature has no <code>g3a_renewal_normalparam()</code>, as there is no
+recruitment directly into the mature stock.</li>
 </ul>
 </div>
 <div id="fleet-actions" class="section level3">
 <h3>Fleet actions</h3>
-<p>There is very little difference defining a fleet for a multiple stock model vs. single stocks.</p>
-<p>To define a fleet, we need to introduce historical data into the model. In our case we will generate random data to use later:</p>
+<p>There is very little difference defining a fleet for a multiple stock
+model vs. single stocks.</p>
+<p>To define a fleet, we need to introduce historical data into the
+model. In our case we will generate random data to use later:</p>
 <div class="modelScript">
 <pre class="r"><code># Fleet data for f_surv #################################
 
@@ -244,8 +271,10 @@ expand.grid(year = 1990:1994, step = 2, area = &#39;IXa&#39;, age = rep(NA, 5), 
   summarise(number = n(), .groups = &#39;keep&#39;) -&gt;
   aldist_f_surv</code></pre>
 </div>
-<p>For more information on how this works, see <code>vignette(&quot;incorporating-observation-data&quot;)</code>.</p>
-<p>Our fleet is defined with the same set of actions as the single-species model:</p>
+<p>For more information on how this works, see
+<code>vignette(&quot;incorporating-observation-data&quot;)</code>.</p>
+<p>Our fleet is defined with the same set of actions as the
+single-species model:</p>
 <div class="modelScript">
 <pre class="r"><code># Create fleet definition for f_surv ####################
 f_surv &lt;- g3_fleet(&quot;f_surv&quot;) |&gt; g3s_livesonareas(area_names[&quot;IXa&quot;])
@@ -283,10 +312,20 @@ actions &lt;- c(actions, actions_f_surv, actions_likelihood_f_surv)</code></pre>
 </div>
 <p>There are 2 differences to before:</p>
 <ul>
-<li>All actions use our list <code>stocks</code>, not an individual stock. Without additional changes, the 2 are treated as a single combined stock.</li>
-<li>We set <code>g3_suitability_exponentiall50(by_stock = &#39;species&#39;)</code>, instructing it to have a single <code>alpha</code> &amp; <code>l50</code> parameter for both our stocks, as they have the same species name.</li>
+<li>All actions use our list <code>stocks</code>, not an individual
+stock. Without additional changes, the 2 are treated as a single
+combined stock.</li>
+<li>We set
+<code>g3_suitability_exponentiall50(by_stock = &#39;species&#39;)</code>,
+instructing it to have a single <code>alpha</code> &amp;
+<code>l50</code> parameter for both our stocks, as they have the same
+species name.</li>
 </ul>
-<p>The <code>by_stock</code> parameter is passed through to <code>g3_parameterized()</code>. We can see the result of setting this in the parameter template. If <code>by_stock = TRUE</code> (the default) then we get parameters for both <code>fish_imm.f_surv.l50</code> &amp; <code>fish_mat.f_surv.l50</code>:</p>
+<p>The <code>by_stock</code> parameter is passed through to
+<code>g3_parameterized()</code>. We can see the result of setting this
+in the parameter template. If <code>by_stock = TRUE</code> (the default)
+then we get parameters for both <code>fish_imm.f_surv.l50</code> &amp;
+<code>fish_mat.f_surv.l50</code>:</p>
 <pre class="r"><code>simple_model &lt;- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
     f_surv,
     stocks,
@@ -295,7 +334,8 @@ actions &lt;- c(actions, actions_f_surv, actions_likelihood_f_surv)</code></pre>
 names(attr(simple_model, &quot;parameter_template&quot;))</code></pre>
 <pre><code>## [1] &quot;retro_years&quot;           &quot;fish_imm.f_surv.alpha&quot; &quot;fish_imm.f_surv.l50&quot;  
 ## [4] &quot;fish_mat.f_surv.alpha&quot; &quot;fish_mat.f_surv.l50&quot;   &quot;project_years&quot;</code></pre>
-<p>If <code>by_stock = &#39;species&#39;</code>, then there is a single, shared <code>fish.f_surv.l50</code> parameter:</p>
+<p>If <code>by_stock = &#39;species&#39;</code>, then there is a single, shared
+<code>fish.f_surv.l50</code> parameter:</p>
 <pre class="r"><code>simple_model &lt;- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
     f_surv,
     stocks,
@@ -304,7 +344,11 @@ names(attr(simple_model, &quot;parameter_template&quot;))</code></pre>
 names(attr(simple_model, &quot;parameter_template&quot;))</code></pre>
 <pre><code>## [1] &quot;retro_years&quot;       &quot;fish.f_surv.alpha&quot; &quot;fish.f_surv.l50&quot;  
 ## [4] &quot;project_years&quot;</code></pre>
-<p>The <code>by_stock</code> parameter is just a convenient shortcut to change the default settings, if we specify <code>g3_parameterized()</code> ourselves we can change the parameterization in other ways, for example <code>by_year = TRUE</code> gives us per-year <code>l50</code>:</p>
+<p>The <code>by_stock</code> parameter is just a convenient shortcut to
+change the default settings, if we specify
+<code>g3_parameterized()</code> ourselves we can change the
+parameterization in other ways, for example <code>by_year = TRUE</code>
+gives us per-year <code>l50</code>:</p>
 <pre class="r"><code>simple_model &lt;- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
     f_surv,
     stocks,
@@ -316,12 +360,16 @@ names(attr(simple_model, &quot;parameter_template&quot;))</code></pre>
 ## [4] &quot;fish.f_surv.l50.1991&quot;  &quot;fish.f_surv.l50.1992&quot;  &quot;fish.f_surv.l50.1993&quot; 
 ## [7] &quot;fish.f_surv.l50.1994&quot;  &quot;fish_mat.f_surv.alpha&quot; &quot;project_years&quot;</code></pre>
 <p>See <code>?vignette(&#39;model-customisation&#39;)</code> for more.</p>
-<p>If we had data on the distribution of mature vs. immature, our observation data could contain a <em>stock</em> column with <code>fish_imm</code> or <code>fish_mat</code>. See <code>vignette(&quot;incorporating-observation-data&quot;)</code>.</p>
+<p>If we had data on the distribution of mature vs. immature, our
+observation data could contain a <em>stock</em> column with
+<code>fish_imm</code> or <code>fish_mat</code>. See
+<code>vignette(&quot;incorporating-observation-data&quot;)</code>.</p>
 <p>Again, further fleets can be added by repeating the code above.</p>
 </div>
 <div id="survey-indices" class="section level3">
 <h3>Survey indices</h3>
-<p>Survey indices should be handed the full <code>stocks</code> list, instead of a single stock, but are otherwise the same as before:</p>
+<p>Survey indices should be handed the full <code>stocks</code> list,
+instead of a single stock, but are otherwise the same as before:</p>
 <div class="modelScript">
 <pre class="r"><code># Create abundance index for si_cpue ########################
 
@@ -358,7 +406,10 @@ model_code &lt;- g3_to_tmb(c(actions, list(
     g3l_bounds_penalty(actions) )))</code></pre>
 </div>
 <p>Now we should be configuring parameters based on the template.</p>
-<p>Thanks to using wildcards in the <code>g3_init_val()</code> calls, a lot of the parameter settings will work regardless of the model being single- or multi-stock, so we don’t need to change the initial values from the previous model:</p>
+<p>Thanks to using wildcards in the <code>g3_init_val()</code> calls, a
+lot of the parameter settings will work regardless of the model being
+single- or multi-stock, so we don’t need to change the initial values
+from the previous model:</p>
 <div class="modelScript">
 <pre class="r"><code># Guess l50 / linf based on stock sizes
 estimate_l50 &lt;- g3_stock_def(st_imm, &quot;midlen&quot;)[[length(g3_stock_def(st_imm, &quot;midlen&quot;)) / 2]]
@@ -382,7 +433,12 @@ attr(model_code, &quot;parameter_template&quot;) |&gt;
   g3_init_val(&quot;*.bbin&quot;, 100, lower = 1e-05, upper = 1000) |&gt;
   identity() -&gt; params.in</code></pre>
 </div>
-<p>Finally we are ready for optimisation runs. <code>g3_tmb_adfun()</code> is a wrapper around <code>TMB::MakeADFun()</code> and <code>TMB::compile</code>, producing a TMB <em>objective function</em>. <code>gadgetutils::g3_iterative()</code> then optimises based on iterative reweighting</p>
+<p>Finally we are ready for optimisation runs.
+<code>g3_tmb_adfun()</code> is a wrapper around
+<code>TMB::MakeADFun()</code> and <code>TMB::compile</code>, producing a
+TMB <em>objective function</em>.
+<code>gadgetutils::g3_iterative()</code> then optimises based on
+iterative reweighting</p>
 <div class="modelScript">
 <pre class="r"><code># Optimise model ################################
 obj.fn &lt;- g3_tmb_adfun(model_code, params.in)
@@ -398,7 +454,8 @@ params.out &lt;- gadgetutils::g3_iterative(getwd(),
     control = list(maxit = 1000, reltol = 1e-10),
     cv_floor = 0.05)</code></pre>
 </div>
-<p>Once this has finished, we can view the output using <code>gadgetplots::gadget_plots()</code>.</p>
+<p>Once this has finished, we can view the output using
+<code>gadgetplots::gadget_plots()</code>.</p>
 <div class="modelScript">
 <pre class="r"><code># Generate detailed report ######################
 fit &lt;- gadgetutils::g3_fit(model_code, params.out)
@@ -412,7 +469,8 @@ gadgetplots::gadget_plots(fit, &quot;figs&quot;, file_type = &quot;html&quot;)</
 </div>
 <div id="appendix-full-model-script" class="section level2">
 <h2>Appendix: Full model script</h2>
-<p>For convenience, here is all the sections of the model script above joined together:</p>
+<p>For convenience, here is all the sections of the model script above
+joined together:</p>
 <script>
 document.write(
     '<div class="modelScript"><div class="sourceCode hasCopyButton"><pre class="downlit sourceCode r">' +

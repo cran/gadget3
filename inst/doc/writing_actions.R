@@ -1,8 +1,8 @@
-## ---- message=FALSE, echo=FALSE-----------------------------------------------
+## ----message=FALSE, echo=FALSE------------------------------------------------
 library(gadget3)
 library(magrittr)
 
-## ---- eval=FALSE--------------------------------------------------------------
+## ----eval=FALSE---------------------------------------------------------------
 #      out <- new.env(parent = emptyenv())
 #      out[[step_id(run_at, 1, stock)]] <- g3_step(f_substitute(~{
 #          debug_label("g3a_mature for ", stock)
