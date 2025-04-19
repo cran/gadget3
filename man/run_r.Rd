@@ -9,7 +9,12 @@
 }
 
 \usage{
-g3_to_r(actions, trace = FALSE, strict = FALSE)
+g3_to_r(
+        actions,
+        work_dir = getOption('gadget3.r.work_dir', default = tempdir()),
+        trace = FALSE,
+        strict = FALSE,
+        cmp_options = list(optimize = 3) )
 
 \method{print}{g3_r}(x, ..., with_environment = FALSE, with_template = FALSE)
 
@@ -18,6 +23,13 @@ g3_to_r(actions, trace = FALSE, strict = FALSE)
 \arguments{
   \item{actions}{
     A list of actions (i.e. list of formula objects), as produced by \var{g3a_}* functions.
+  }
+  \item{work_dir}{
+    Where to write the temporary R script containing your function
+  }
+  \item{cmp_options}{
+    options to pass through to \code{\link[compiler:cmpfun]{compiler::cmpfun()}}.
+    If \code{NULL}, then don't run the model through the byte-code compiler
   }
   \item{trace}{
     If TRUE, turn all comments into print statements.
@@ -39,8 +51,15 @@ g3_to_r(actions, trace = FALSE, strict = FALSE)
 }
 
 \value{
-  A function that takes a \var{params} variable, that defines all \var{g3_param}s required by the model.
-  The following attributes will be set:
+  A function that takes a \var{params} variable, which can be:
+
+  \enumerate{
+    \item{A list of parameters as defined by \code{attr(fn, 'parameter_template')}}
+    \item{A data.frame of parameters defined by \code{\link{g3_to_tmb}}'s parameter template}
+    \item{Not provided, in which case the parameter defaults are used}
+  }
+
+  The function will have the following attributes:
   \describe{
     \item{actions}{The original \var{actions} list given to the function}
     \item{parameter_template}{A list of all parameters expected by the model, to fill in}

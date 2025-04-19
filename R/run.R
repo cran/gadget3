@@ -13,40 +13,62 @@ force_vector <- function (...) as_force_vector(c(...))
 hide_force_vector <- function (x) {
     # NB: Doing this indiscrimitely upsets array classes & makes them more matrix-ish(?)
     if (inherits(x, "force_vector")) class(x) <- class(x)[class(x) != "force_vector"]
+    if (inherits(x, "force_numeric")) class(x) <- class(x)[class(x) != "force_numeric"]
     return(x)
 }
 
 # Should (x) be treated as a vector?
 is_force_vector <- function (x) length(x) > 1 || inherits(x, "force_vector")
 
+# Add force_numeric marker to (x), so we define as array<double>, e.g.
+as_force_numeric <- function (x) {
+    class(x) <- c("force_numeric", class(x))
+    return(x)
+}
+is_force_numeric <- function (x) inherits(x, "force_numeric")
+
 # Combine all provided action lists into one action list, throwing away duplicates
 g3_collate <- function(action_list) {
-    # Combine all lists into an environment, later lists win over previous
-    # TODO: Just concatenate the lists backwards?
-    actions <- new.env(parent = emptyenv())
+    # Collapse lists / sub-lists into a single list, preserving order
+    unnest <- function (l) {
+        # Recurse along l generating sub-lists, then concatentate together
+        do.call(c, lapply(seq_along(l), function (i) {
+            if (is.null(l[[i]])) {
+                # Strip NULLs (and avoid calling environment(NULL))
+                c()
+            } else if (is.list(l[[i]])) {
+                # Flattern sub-lists by recursing
+                unnest(l[[i]])
+            } else {
+                # Convert non-lists into a single-item list
+                out <- structure(list(l[[i]]), names = names(l)[[i]])
 
-    # For any lone formulas without names, assume they just go on the end
-    # This will mostly be test case convenince, not general use
-    if (is.null(names(action_list))) {
-        names(action_list) <- vapply(seq_along(action_list), function (i) step_id(999, i), character(1))
-    }
+                # Pull out items stuffed in environment()
+                ancillary_step_names <- grep("^(?:\\d|-)\\d{2}:", names(environment(l[[i]])), value = TRUE, perl = TRUE)
+                if (length(ancillary_step_names) > 0) out <- c(out, mget(ancillary_step_names, envir = environment(l[[i]])))
 
-    for (n in names(action_list)) {
-        l <- action_list[[n]]
-        if (rlang::is_formula(l)) {
-            # One level of list, add this formula
-            actions[[n]] <- l
-        } else {
-            # 2 levels, recurse over inner list too
-            for (sub_n in names(l)) {
-                actions[[sub_n]] <- l[[sub_n]]
+                out
             }
-        }
+        }))
     }
-    actions <- as.list(actions)
+    actions <- unnest(action_list)
 
-    # Order items in alphanumeric order
-    return(actions[order(names(actions), method = 'radix')])
+    # Filter NULL
+    actions <- actions[vapply(actions, Negate(is.null), logical(1))]
+
+    # If no names (probably a test), nothing else to do
+    if (is.null(names(actions))) return(actions)
+
+    # If name is missing, assume it goes on the end
+    names(actions) <- vapply(seq_along(actions), function (i) {
+        if (nzchar(names(actions)[[i]])) names(actions)[[i]] else step_id(999, "g3_collate", i)
+    }, character(1))
+
+    # De-duplicate by action-order, then sort by name
+    actions <- actions[!duplicated(names(actions), fromLast = TRUE)]
+    actions <- actions[order(names(actions), method = 'radix')]
+
+    return(actions)
 }
 
 scope_to_parameter_template <- function (scope, return_type) {
@@ -70,12 +92,12 @@ update_data_bounds <- function (model_data, param_tmpl) {
         # User didn't supply extra parameters, nothing to do
     } else if (is.data.frame(param_tmpl)) {
         for (param_type in c('lower', 'upper')) {
-            for (i in which(is.finite(param_tmpl[[param_type]])) ) {
-                data_var <- cpp_escape_varname(paste0(param_tmpl[i, 'switch'], '__', param_type))
+            for (i in seq_len(nrow(param_tmpl))) {
+                data_var <- paste0(param_tmpl[i, 'switch'], '__', param_type)
                 if (!exists(data_var, envir = model_data)) next
 
                 data_val <- param_tmpl[i, param_type]
-                model_data[[data_var]] <- if (is.finite(data_val)) data_val else NaN
+                model_data[[data_var]] <- if (is.na(data_val)) NaN else data_val
             }
         }
     } else {

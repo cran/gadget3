@@ -1,6 +1,7 @@
 ## ----message=FALSE, echo=FALSE------------------------------------------------
 library(gadget3)
 library(magrittr)
+if (nzchar(Sys.getenv('G3_TEST_TMB'))) options(gadget3.tmb.work_dir = gadget3:::vignette_base_dir('work_dir'))
 
 ## ----eval=FALSE---------------------------------------------------------------
 #      out <- new.env(parent = emptyenv())
@@ -15,4 +16,17 @@ library(magrittr)
 #              stock_ss(stock__num) <- stock_ss(stock__num) - stock_ss(matured__num)
 #          }))
 #      }, list(run_f = run_f, maturity_f = maturity_f)))
+
+## -----------------------------------------------------------------------------
+st_imm <- g3_stock(c("st", "imm"), 1:10)
+g3_to_r(list(
+    g3a_naturalmortality(
+        st_imm,
+        g3_formula(
+            parrot**2,
+            parrot = 0,
+            "-01:ut:parrot" = g3_formula({
+                parrot <- runif(1)
+            }))),
+    NULL ))
 

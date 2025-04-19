@@ -54,7 +54,6 @@ ok_group('g3a_likelihood_tagging_ckmr', {
             recruitment_f = g3a_spawn_recruitment_ricker(
                 ~g3_param("ricker.mu"),
                 ~g3_param("ricker.lambda")),
-            weightloss_f = ~g3_param("spawn.weightloss"),
             output_stocks = list(ling_imm),
             mean_f = 50,
             stddev_f = 10,
@@ -98,6 +97,8 @@ year parent_age offspring_age mo_pairs
         time_actions)
 
     # Compile model
+    actions <- c(actions, list(
+        g3a_report_history(actions, var_re = "tagging_ckmrmodel_(spawning|spawned|total|catch)$|__cons$|__suit$", out_prefix = "hist") ))
     model_fn <- g3_to_r(actions, trace = FALSE)
     # model_fn <- edit(model_fn)
     if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
@@ -133,7 +134,8 @@ year parent_age offspring_age mo_pairs
     params$ricker.mu <- 1
     params$ricker.lambda <- 1e-6
     params$tagging_ckmr_weight <- 1.0
-    params$spawn.weightloss <- 0.1
+
+    # capture.output(print(attributes(model_fn(params))), file = 'gadget3/test-likelihood_tagging_ckmr.baseline')
 
     if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
         param_template <- attr(model_cpp, "parameter_template")

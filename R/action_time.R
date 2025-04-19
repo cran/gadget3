@@ -21,7 +21,8 @@ g3a_time <- function(
         final_year_steps = quote( length(step_lengths) ),
         project_years = g3_parameterized("project_years", value = 0, optimise = FALSE),
         retro_years = g3_parameterized("retro_years", value = 0, optimise = FALSE),
-        run_at = g3_action_order$time) {
+        run_at = g3_action_order$initial,
+        run_stop_at = g3_action_order$time) {
     if (inherits(step_lengths, "mfdb_group")) step_lengths <- vapply(step_lengths, length, numeric(1))
     if (is.numeric(step_lengths) && sum(step_lengths) != 12) stop("step_lengths should sum to 12 (i.e. represent a whole year)")
     if (is.call(step_lengths) && !is.call(final_year_steps)) stop("If step_lengths is a call/formula, final_year_steps should also be a call/formula")
@@ -53,35 +54,36 @@ g3a_time <- function(
         ~length(step_lengths) * (end_year - retro_years - start_year + project_years) + final_year_steps - 1L,
         list(
             # i.e. hard code a 0L (so it can be optimised out), otherwise include variable
-            project_years = if (have_projection_years) quote(project_years) else 0L,
-            retro_years = if (have_retro_years) quote(retro_years) else 0L,
+            project_years = if (have_projection_years) quote(as_integer(project_years)) else 0L,
+            retro_years = if (have_retro_years) quote(as_integer(retro_years)) else 0L,
             final_year_steps = final_year_steps )))
     total_years <- g3_global_formula(init_val = f_substitute(
         ~end_year - retro_years - start_year + project_years + 1L,
         list(
-            retro_years = if (have_retro_years) quote (retro_years) else 0L,
-            project_years = if (have_projection_years) quote(project_years) else 0L)))
+            # NB: retro_years / project_years are parameters, so will be Type
+            retro_years = if (have_retro_years) quote (as_integer(retro_years)) else 0L,
+            project_years = if (have_projection_years) quote(as_integer(project_years)) else 0L)))
     nll <- 0.0
 
     out <- new.env(parent = emptyenv())
     out[[step_id(run_at)]] <- g3_step(f_substitute(~{
         debug_label("g3a_time: Start of time period")
+        cur_time <- cur_time + 1L
         if (have_retro_years) if (cur_time == 0 && assert_msg(retro_years >= 0, "retro_years must be >= 0")) return(NaN)
         if (have_projection_years) if (cur_time == 0 && assert_msg(project_years >= 0, "project_years must be >= 0")) return(NaN)
-        if (cur_time > total_steps) {
-            return(nll)
-        }
         cur_year <- start_year + (cur_time %/% step_count)
         cur_year_projection <- (cur_year > end_year - retro_years)
         cur_step <- (cur_time %% step_count) + 1L
-        # Don't bother changing step size if it's always the same
-        if (uneven_steps) cur_step_size <- step_lengths[[cur_step]] / 12.0
+        cur_step_size <- step_lengths[[cur_step]] / 12.0
         cur_step_final <- cur_step == step_count
     }, list(
         retro_years = retro_years,
         have_projection_years = have_projection_years,
         have_retro_years = have_retro_years,
-        uneven_steps = if(is.numeric(step_lengths)) any(diff(step_lengths) > 0) else TRUE)))
+        end = NULL )))
+
+    # Once any initial work has been performed, stop the model.
+    out[[step_id(run_stop_at)]] <- ~{ if (cur_time > total_steps) return(nll) }
 
     # Make sure variables are defined, even without uneven_steps
     assign("cur_step_size", cur_step_size, envir = environment(out[[step_id(run_at)]]))

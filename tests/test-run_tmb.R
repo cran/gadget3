@@ -13,6 +13,44 @@ capture_warnings <- function(x, full_object = FALSE) {
     return(list(rv = rv, warnings = all_warnings))
 }
 
+cmp_contains <- function(a, regex) {
+    if(isTRUE(grepl(regex, a))) return(TRUE)
+    c(regex, "not in", a)
+}
+
+# Mock (fn) in namespace with (replacement) whilst (block) is being evaluated
+mock <- function (fn, replacement, block) {
+    # Get the name of the function from the unevaluated argument,
+    # assuming it's of the form package::name
+    fn_name <- as.character(as.list(sys.call()[[2]])[[3]])
+    ns <- environment(fn)
+
+    orig_fn <- get(fn_name, env = ns)
+    unlockBinding(fn_name, env = ns)
+    assign(fn_name, replacement, envir = ns)
+    on.exit(assign(fn_name, orig_fn, envir = ns), add = TRUE)
+
+    block
+}
+
+ok_group("g3_tmb_adfun:compile_args") ##########
+last_compile_call <- list()
+mock(TMB::compile, function (...) {
+    # NB: as.list(...) is only returning the first argument, for some reason
+    args <- lapply(seq_along(...names()), function (i) ...elt(i))
+    names(args) <- ...names()
+    last_compile_call <<- args
+
+    ok(cmp_contains(
+        last_compile_call[[1]],
+        paste0(gsub("\\\\", "/", tempdir()), ".*\\.cpp$") ), "First argument is the cpp file")
+}, {
+    # NB: This should fail since there'll be no .so to load
+    tryCatch(g3_tmb_adfun(g3_to_tmb(list(~{g3_param("x")}))), error = function (e) NULL)
+    ok(grepl("-DEIGEN_PERMANENTLY_DISABLE_STUPID_WARNINGS", last_compile_call$flags, fixed = TRUE), "compile_flags: Internal flags set")
+})
+########## g3_tmb_adfun:compile_args
+
 ok(ut_cmp_error({
     invalid_subset <- array(dim = c(2,2,2))
     g3_to_tmb(list(~{invalid_subset[,g3_idx(1),]}))
@@ -55,15 +93,6 @@ ok(ut_cmp_error({
 ok(ut_cmp_error({
     g3_to_tmb(list(~g3_param("camel", optimize = FALSE)))
 }, "optimise"), "Optimise is spelt with an s in g3_param()")
-
-ok_group("Exponentiate params")
-params.in <- attr(g3_to_tmb(list( g3a_time(1990, 2000), g3_formula(
-    quote(d),
-    d = g3_parameterized('par.years', value = 0, by_year = TRUE, exponentiate = TRUE),
-    x = NA) )), 'parameter_template')
-ok(ut_cmp_identical(params.in[grep('^par', params.in$switch), 'switch'], c(
-    paste0('par.years.', 1990:2000, '_exp'),
-    NULL)), "exponentiate prefix ends up at the end of parameters")
 
 ok_group('g3_tmb_par', {
     param <- attr(g3_to_tmb(list(~{
@@ -264,6 +293,7 @@ ok_group('g3_param', {
             lower = c(NA, 5),
             upper = c(NA, 10),
             parscale = as.numeric(c(NA, NA)),  # NB: Not derived yet, only when calling g3_tmb_parscale()
+            source = as.character(NA),
             stringsAsFactors = FALSE)), "Param table included custom values")
 })
 
@@ -275,6 +305,12 @@ ok_group('g3_param_table', {
         g3_param_table('pg', expand.grid(
             cur_year = start_year,
             cur_step = 1:2), value = 4, optimise = FALSE, random = TRUE, lower = 5, upper = 10)
+        g3_param_table('p_inited',
+            expand.grid(cur_year = seq(start_year, end_year)),
+            lower = 0:4,
+            value = 100:104,
+            upper = 1000:1004,
+            parscale = 5 )
     })), 'parameter_template')
     ok(ut_cmp_identical(
         param[c(paste('pt', 2000:2004, 2, sep = '.'), paste('pt', 2000:2004, 3, sep = '.'), 'pg.2000.1', 'pg.2000.2'),],
@@ -301,7 +337,16 @@ ok_group('g3_param_table', {
             upper = c(NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 10, 10),
             # NB: Not derived yet, only when calling g3_tmb_parscale()
             parscale = as.numeric(c(NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA)),
+            source = as.character(NA),
             stringsAsFactors = FALSE)), "Param table included custom values")
+    ok(gadget3:::ut_cmp_df(param[grepl("^p_inited.", param$switch), c("switch", "value", "lower", "upper", "parscale")], '
+                         switch value lower upper parscale
+    p_inited.2000 p_inited.2000   100     0  1000        5
+    p_inited.2001 p_inited.2001   101     1  1001        5
+    p_inited.2002 p_inited.2002   102     2  1002        5
+    p_inited.2003 p_inited.2003   103     3  1003        5
+    p_inited.2004 p_inited.2004   104     4  1004        5
+    '), "p_inited: Init'ed value/lower/upper with a vector")
     ok(ut_cmp_identical(
         attr(g3_to_tmb(list(~{
             g3_param_table('moo', expand.grid(cur_year=1990:1994))
@@ -317,6 +362,19 @@ ok_group("g3_to_tmb: attr.actions", {
         "003" = ~{3 + 3})
     model_fn <- g3_to_tmb(actions)
     ok(ut_cmp_identical(attr(model_fn, 'actions'), actions), "actions returned as attribute uncollated")
+})
+
+ok_group("g3_to_tmb: model_data", {
+    lots.of.data <- floor(runif(100, 1e4, 1e5))
+    model_fn <- g3_to_tmb(list(g3_formula(
+        mean(lots.of.data) + g3_param_lower('parrot.par'),
+        lots.of.data = lots.of.data )))
+    ok(ut_cmp_equal(
+        attr(model_fn, "model_data")$lots.of.data,
+        lots.of.data ), "model_data uses unescaped variable names")
+    ok(ut_cmp_equal(
+        attr(model_fn, "model_data")$parrot.par__lower,
+        NaN ), "model_data g3_param_lower uses unescaped variable names")
 })
 
 ok_group("g3_to_tmb: Can use random parameters without resorting to include_random", local({
@@ -348,6 +406,18 @@ ok_group("g3_to_tmb: Can use random parameters without resorting to include_rand
                 ~g3_param('sigma0', value=1), period="single" ))
     })
     model_fn <- g3_to_r(actions)
+
+    # Test we can build / report with type = "Fun" first
+    if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
+        model_cpp <- g3_to_tmb(actions)
+        model_tmb <- g3_tmb_adfun(model_cpp, compile_flags = c("-O0", "-g"), inner.control = list(fnscale = -1), type = "Fun")
+        param_tbl <- attr(model_cpp, 'parameter_template')
+        ok(ut_cmp_equal(model_tmb$report(g3_tmb_par(param_tbl)), list(
+            nll_random_dnorm_a__dnorm = as.array(0.9189385),
+            nll_random_dnorm_x__dnorm = as.array(147.3886),
+            nll_random_dnorm_b__dnorm = as.array(0.9189385) ),
+            tolerance = 1e6), "$report: Can build and run $report with random effects & type='Fun'")
+    }
 
     if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
         model_cpp <- g3_to_tmb(actions)
@@ -421,13 +491,25 @@ ok_group("cpp_code", {
         "x[[(-4 + 1 - 1) / (2*8)]] + 4: Assumed int passses through +, -, *, /, ( ")
 })
 
+ok_group("g3_to_tmb:slice", local({
+    camel <- array(dim = c(10, 10))
+    ok(ut_cmp_error(
+        g3_to_tmb(list( ~camel[, 2:4] )),
+        "first column"), "camel[, 2:4]: In second dimension, not allowed")
+    ok(ut_cmp_error(
+        g3_to_tmb(list( ~camel[1, 2, 2:4] )),
+        "first column"), "camel[1, 2, 2:4]: In third dimension, not allowed")
+}))
 
 ###############################################################################
-actions <- list()
+actions <- list(g3a_time(1990, 1991))
 expecteds <- new.env(parent = emptyenv())
 expected_warnings_r <- c()
 expected_warnings_tmb <- c()
-params <- list(rv=0)
+params <- list(
+     retro_years = 0,
+     project_years = 0,
+     rv = 0 )
 
 # Check constants can pass through cleanly
 constants_integer <- 999
@@ -439,6 +521,40 @@ actions <- c(actions, ~{
 })
 expecteds$constants_integer <- 5L
 expecteds$constants_nan <- NaN
+
+# slice
+slice_vec_in <- floor(runif(100, 1e5, 1e6))
+slice_vec_out <- 0 * slice_vec_in[30:45]
+slice_vec_out_idx <- 0L
+slice_arr_in <- array(floor(runif(100, 1e5, 1e6)), dim = c(10, 10))
+slice_arr_out <- 0 * slice_arr_in[4:8, 5]
+slice_vec_set_in <- floor(runif(100, 1e5, 1e6))
+slice_vec_set_out <- 0 * slice_vec_set_in
+slice_namedvec_in <- array(
+    floor(runif(100, 1e5, 1e6)),
+    dim = c(step = 5, year = 4) )
+slice_namedvec_out1 <- 0 * slice_namedvec_in[step = 2, year = 2]
+slice_namedvec_out2 <- 0 * slice_namedvec_in[step = 3:4, year = 2]
+actions <- c(actions, ~{
+    comment("scalar slice")
+    slice_vec_out_idx <- g3_idx(30L)
+    # NB: Values in slice are auto_idx'ed
+    slice_vec_out <- slice_vec_in[slice_vec_out_idx:45] ; REPORT(slice_vec_out)
+    slice_arr_out <- slice_arr_in[4:g3_idx(8), g3_idx(5)] ; REPORT(slice_arr_out)
+    slice_vec_set_out <- slice_vec_set_in
+    slice_vec_set_out[g3_idx(24):g3_idx(34)] <- 99
+    REPORT(slice_vec_set_out)
+    slice_namedvec_out1 <- slice_namedvec_in[step = g3_idx(2), year = g3_idx(2)]
+    slice_namedvec_out2 <-  slice_namedvec_in[step = 3:4, year = g3_idx(2)]
+    REPORT(slice_namedvec_out1)
+    REPORT(slice_namedvec_out2)
+})
+expecteds$slice_vec_out <- slice_vec_in[30:45]
+expecteds$slice_arr_out <- slice_arr_in[4:8, 5]
+expecteds$slice_vec_set_out <- slice_vec_set_in
+expecteds$slice_vec_set_out[24:34] <- 99
+expecteds$slice_namedvec_out1 <- slice_namedvec_in[step = 2, year = 2]
+expecteds$slice_namedvec_out2 <- slice_namedvec_in[step = 3:4, year = 2]
 
 # Can assign a single value to 1x1 array
 assign_to_1_1 <- array(dim = c(1,1))
@@ -518,6 +634,18 @@ actions <- c(actions, ~{
 expecteds$assign_right <- assign_subset[,2,2]
 expecteds$assign_leftright <- assign_subset[4,,2]
 
+cmp_inf <- array(c(5, Inf), dim = c(2))
+cmp_inf_out <- array(0, dim = c(4))
+actions <- c(actions, ~{
+    comment('cmp_infinity')
+    if (cmp_inf[[1]] < Inf) cmp_inf_out[[1]] <- 1 else cmp_inf_out[[1]] <- -1
+    if (cmp_inf[[2]] < Inf) cmp_inf_out[[2]] <- 2 else cmp_inf_out[[2]] <- -2
+    cmp_inf_out[[3]] <- Inf
+    cmp_inf_out[[4]] <- -Inf
+    REPORT(cmp_inf_out)
+})
+expecteds$cmp_inf_out <- array(c(1, -2, Inf, -Inf), dim = c(4))
+
 # Arrays with dynamic dimensions
 dynamic_dim_array <- array(0, dim = c(2,1))
 dynamic_dim_array_na <- array(NA, dim = c(2,1))
@@ -566,6 +694,8 @@ actions <- c(actions, ~{
     is_nan_output <- is_nan_output + (if (any(is.nan(is_nan_nan_array_input))) 8 else 0)
     is_nan_output <- is_nan_output + (if (any(is.nan(is_nan_nan_vector_input))) 16 else 0)
     is_nan_output <- is_nan_output + (if (any(is.nan(is_nan_finite_single_array_input))) 32 else 0)
+    is_nan_output <- is_nan_output + (if (is.nan(is_nan_finite_array_input[[1]])) 64 else 0)
+    is_nan_output <- is_nan_output + (if (is.nan(is_nan_finite_array_input[g3_idx(2)])) 128 else 0)
     REPORT(is_nan_output)
     is_finite_output <- is_finite_output + (if (is.finite(is_nan_nan_scalar_input)) 1 else 0)
     is_finite_output <- is_finite_output + (if (is.finite(is_nan_finite_scalar_input)) 2 else 0)
@@ -573,10 +703,24 @@ actions <- c(actions, ~{
     is_finite_output <- is_finite_output + (if (any(is.finite(is_nan_nan_array_input))) 8 else 0)
     is_finite_output <- is_finite_output + (if (any(is.finite(is_nan_nan_vector_input))) 16 else 0)
     is_finite_output <- is_finite_output + (if (any(is.finite(is_nan_finite_single_array_input))) 32 else 0)
+    is_finite_output <- is_finite_output + (if (is.finite(is_nan_finite_array_input[[1]])) 64 else 0)
+    is_finite_output <- is_finite_output + (if (is.finite(is_nan_finite_array_input[g3_idx(2)])) 128 else 0)
     REPORT(is_finite_output)
 })
 expecteds$is_nan_output <- 1 + 8 + 16
-expecteds$is_finite_output <- 2 + 4 + 32
+expecteds$is_finite_output <- 2 + 4 + 32 + 64 + 128
+
+# length --> size()
+length_inp <- rep(0, floor(runif(1, 2, 10)))
+actions[["integer_division"]] <- g3_formula(
+    {
+        expect_length_1 <- length(length_inp)
+        expect_length_2 <- as.numeric(length(length_inp))
+    },
+    length_inp = length_inp,
+    expect_length_1 = length(length_inp),
+    expect_length_2 = as.numeric(length(length_inp)),
+    end = NULL )
 
 # as.vector() --> .vec()
 as_vector_array <- array(runif(20), dim=c(10, 2))
@@ -593,6 +737,84 @@ actions <- c(actions, ~{
 })
 expecteds$as_vector_result1 <- pnorm(as_vector_array[,1], as_vector_mean, as_vector_sigma)
 expecteds$as_vector_result2 <- pnorm(as_vector_array[,2], as_vector_mean, as_vector_sigma)
+
+# Flow control
+flow_control_vec <- runif(10)
+flow_control_break_sum <- 0.0
+flow_control_next_sum <- 0.0
+flow_control_nested_tertiary <- 0.0
+actions <- c(actions, ~{
+    comment('Flow control')
+    for (flow_control_idx in seq_along(flow_control_vec)) {
+        if (flow_control_idx == g3_idx(5)) break
+        flow_control_break_sum <- flow_control_break_sum + flow_control_vec[[flow_control_idx]]
+    }
+    REPORT(flow_control_break_sum)
+    for (flow_control_idx in seq_along(flow_control_vec)) {
+        if (flow_control_idx == g3_idx(5)) next
+        flow_control_next_sum <- flow_control_next_sum + flow_control_vec[[flow_control_idx]]
+    }
+    REPORT(flow_control_next_sum)
+    flow_control_nested_tertiary <- (if(flow_control_vec[[1]] > 0.5) ( if (flow_control_vec[[2]] > 0.5) flow_control_vec[[3]] else flow_control_vec[[4]] ) else flow_control_vec[[5]])
+    REPORT(flow_control_nested_tertiary)
+})
+expecteds$flow_control_break_sum <- sum(flow_control_vec[1:4])
+expecteds$flow_control_next_sum <- sum(flow_control_vec[-5])
+expecteds$flow_control_nested_tertiary <- (if(flow_control_vec[[1]] > 0.5) ( if (flow_control_vec[[2]] > 0.5) flow_control_vec[[3]] else flow_control_vec[[4]] ) else flow_control_vec[[5]])
+
+# Integer division / %/%
+intdiv_1 <- 0 - runif(1, 2, 10)
+intdiv_2 <- floor(runif(1, 2, 10))
+actions[["integer_division"]] <- g3_formula(
+    {
+        expect_intdiv_1 <- intdiv_1 %/% 2L
+        expect_intdiv_2 <- intdiv_2 %/% 2L
+    },
+    intdiv_1 = intdiv_1,
+    intdiv_2 = intdiv_2,
+    expect_intdiv_1 = intdiv_1 %/% 2L,
+    expect_intdiv_2 = intdiv_2 %/% 2L,
+    end = NULL )
+
+# pow() / .pow()
+pow_scalar <- 99
+pow_scalar_result <- 0
+pow_vector <- c("50:60" = 55, "60:70" = 65, "70:80" = 75, "80:90" = 85, "90:100" = 95, "100:Inf" = 105)
+pow_vector_result <- array(0, dim = c(6, 5))
+actions <- c(actions, ~{
+    comment('pow_vector')
+    pow_scalar_result <- pow_scalar^3
+    REPORT(pow_scalar_result)
+    # NB: This has to use pow_vector.pow(), pow(pow_vector, 2) fails
+    g3_with(pv := 5 * pow_vector^2, for (a in seq(1, 5, by = 1)) {
+        pow_vector_result[,g3_idx(a)] <- pv
+    })
+    REPORT(pow_vector_result)
+})
+expecteds$pow_scalar_result <- pow_scalar^3
+expecteds$pow_vector_result <- array(5 * pow_vector^2, dim = c(6, 5))
+
+# Matrix multiplication / %*%
+mmult_matrix <- matrix(runif(9), nrow = 3)
+mmult_vec <- runif(3)
+mmult_result <- array(rep(0, 3), dim = c(3, 1))
+actions <- c(actions, ~{
+    comment('matrix multiplication')
+    mmult_result <- mmult_matrix %*% mmult_vec
+    REPORT(mmult_result)
+})
+expecteds$mmult_result <- mmult_matrix %*% mmult_vec
+
+# Diagonal matrices
+diag_v1 <- runif(10)
+diag_v2 <- runif(10)
+diag_result <- rep(0, 10)
+actions <- c(actions, ~{
+    comment('diagonal matrices')
+    diag_result <- as.vector(diag(diag_v1) %*% diag_v2)
+    REPORT(diag_result)
+})
+expecteds$diag_result <- as.vector(diag(diag_v1) %*% diag_v2)
 
 # mean() --> .mean()
 mean_vector <- array(c(1, 2, 88, 99))
@@ -670,18 +892,28 @@ actions <- c(actions, ~{
 expecteds$g3_with_result <- 1L  # i.e. 2 - 1 in R or 1 - 0 in TMB
 expecteds$g3_with_other_exp <- 1L + 2L + 3L
 
-# min() & max()
-min_result <- 0.0
-max_result <- 0.0
+# min() & max() & floor() & ceiling()
+min_result <- max_result <- floor_result <- ceiling_result <- 0.0
+min_iar_in <- as.array(runif(100))
+min_iar_out <- 0 * min_iar_in[min(3, 7):max(10, 20)]
 actions <- c(actions, ~{
     comment('min/max')
     min_result <- min(4, 9)
     max_result <- max(sum(mean_vector), 2)  # NB: sum gets cast to Type
+    min_iar_out <- min_iar_in[min(3, 7):max(10, 20)]  # NB: Gets auto-idx'ed
+    floor_result <- floor(as.numeric(min_iar_in[[1]]))
+    ceiling_result <- ceiling(as.numeric(min_iar_in[[1]]))
     REPORT(min_result)
     REPORT(max_result)
+    REPORT(min_iar_out)
+    REPORT(floor_result)
+    REPORT(ceiling_result)
 })
 expecteds$min_result <- 4
 expecteds$max_result <- sum(mean_vector)
+expecteds$min_iar_out <- min_iar_in[min(3, 7):max(10, 20)]
+expecteds$floor_result <- floor(min_iar_in[[1]])
+expecteds$ceiling_result <- ceiling(min_iar_in[[1]])
 
 # negate single value
 negate_x <- 10
@@ -816,14 +1048,70 @@ expecteds$param_table_ifmpartab_out <- array(c(
     params[['param_table_ifmpartab.3']],
     NULL))
 
+# g3_param_table(by_year, exponentiate)
+param_table_byyrexp_out <- 0.0
+params[["byyrexp.1990_exp"]] <- 19
+params[["byyrexp.1991_exp"]] <- 20
+actions <- c(actions, gadget3:::f_substitute(~{
+    param_table_byyrexp_out <- x
+    REPORT(param_table_byyrexp_out)
+}, list(
+    x = g3_parameterized("byyrexp", by_year = TRUE, exponentiate = TRUE),
+    end = NULL )))
+expecteds$param_table_byyrexp_out <- exp(19)
+
+# g3_param_table w/clashing names
+# NB: This isn't a great situation to be in, but should at least work to make it easier to unpick
+param_table_nameclash_out <- 0.0
+params[["param_table_nameclash.1990"]] <- runif(1, 100, 200)
+params[["param_table_nameclash.1991"]] <- runif(1, 100, 200)
+params[["param_table_nameclash"]] <- runif(1, 100, 200)
+
+actions <- c(actions, gadget3:::f_substitute(~{
+    param_table_nameclash_out <- x * y
+    REPORT(param_table_nameclash_out)
+}, list(
+    x = g3_parameterized("param_table_nameclash", by_year = TRUE),
+    y = g3_parameterized("param_table_nameclash"),
+    end = NULL )))
+expecteds$param_table_nameclash_out <- params[["param_table_nameclash.1990"]] * params[["param_table_nameclash"]]
+
 ###############################################################################
 
+for (i in seq_along(actions)) {
+    exp_names <- grep("^expect_", names(environment(actions[[i]])), value = TRUE)
+    if (length(exp_names) == 0) next  # Old-style test
+
+    # For each expect_ variable, move to expecteds
+    for (exp_name in exp_names) {
+        expecteds[[exp_name]] <- environment(actions[[i]])[[exp_name]]
+        environment(actions[[i]])[[exp_name]][] <- 0
+    }
+
+    # REPORT every expect_
+    reports <- lapply(exp_names, function (exp_name) {
+        substitute(REPORT(sym), list(sym = as.symbol(exp_name)))
+    })
+    # Convert list to { REPORT(x) ; REPORT(y); ... }
+    reports <- as.call(c(as.symbol("{"), reports))
+
+    # Top/tail actions with a comment of their name & reports
+    actions[[i]] <- gadget3:::f_substitute(quote({
+        comment(act_name)
+        act_f
+        reports
+    }), list(
+        act_name = names(actions)[[i]],
+        act_f = actions[[i]],
+        reports = reports))
+}
+
 nll <- 0.0
-actions <- c(actions, ~{
+actions[['zzzzz']] <- ~{
     comment('done')
     nll <- nll + g3_param('rv')
     return(nll)
-})
+}
 
 # Compile model
 model_fn <- g3_to_r(actions, trace = FALSE)
@@ -831,7 +1119,10 @@ model_fn <- g3_to_r(actions, trace = FALSE)
 if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
     model_cpp <- g3_to_tmb(actions, trace = FALSE)
     # model_cpp <- edit(model_cpp)
-    model_tmb <- g3_tmb_adfun(model_cpp, params, compile_flags = c("-O0", "-g"))
+    w <- capture_warnings(model_tmb <- g3_tmb_adfun(model_cpp, params, compile_flags = c("-O0", "-g")))$warnings
+    ok(ut_cmp_identical(w, c(
+        rep("No value found in g3_param_table param_table, ifmissing not specified", 10),
+        NULL )), "g3_tmb_adfun: Compiling generated a param_table warning")
 } else {
     writeLines("# skip: not compiling TMB model")
 }
@@ -850,4 +1141,10 @@ if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
     param_template$value <- params[param_template$switch]
     generated_warnings <- capture_warnings(gadget3:::ut_tmb_r_compare(model_fn, model_tmb, param_template))$warnings
     ok(ut_cmp_identical(generated_warnings, c(expected_warnings_r, expected_warnings_tmb)), "Warnings from R+TMB as expected")
+
+    ok(ut_cmp_equal(model_tmb$report(), model_tmb$simulate()), "$simulate: Also produces named output, as $report")
+
+    out_simcomplete <- model_tmb$simulate(complete = TRUE)
+    ok(ut_cmp_equal(model_tmb$report(), out_simcomplete[names(model_tmb$report())]), "$simulate(complete=TRUE): Contains named output")
+    ok(ut_cmp_equal(model_tmb$env$data$slice_vec_set_in, out_simcomplete$slice_vec_set_in), "$simulate(complete=TRUE): Also contains data")
 }

@@ -8,6 +8,7 @@ g3_native <- function(r, cpp, depends = c()) {
     #     Ideally we'd be using a reference to base::as.numeric, but that's causing
     #     unfathomable problems in to_tmb land.
     out <- r
+    for (fn_name in depends) environment(out)[[fn_name]] <- g3_env[[fn_name]]  # Link dependencies for g3_eval
     attr(out, "g3_native_cpp") <- cpp
     # Turn depends vector into something that calls each item, to work with var_defns
     attr(out, "g3_native_depends") <- as.call(c(as.symbol("{"), lapply(depends, as.symbol)))  # }
@@ -18,7 +19,8 @@ g3_native <- function(r, cpp, depends = c()) {
 # A global formula is one that has an interative formula and an initial value
 # (f) will set the value within the current step, (init_val) will initialize the variable
 # outside the loop
-g3_global_formula <- function(f = ~noop, init_val = NULL) {
+g3_global_formula <- function(f = quote(noop), init_val = NULL) {
+    if (!rlang::is_formula(f)) f <- call_to_formula(f, new.env(parent = emptyenv()))
     attr(f, "g3_global_init_val") <- init_val
     return(f)
 }

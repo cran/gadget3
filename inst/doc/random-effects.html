@@ -401,12 +401,13 @@ obj.fn &lt;- g3_tmb_adfun(model_code, params.in, inner.control = list(trace = 3,
 
 #obj.fn$env$tracepar &lt;- TRUE
 #obj.fn$env$tracemgc &lt;- TRUE
-out &lt;- optim(par = obj.fn$par, fn = obj.fn$fn, gr = obj.fn$gr, method = &#39;BFGS&#39;, control = list(
-    maxit = 1000,
-    trace = 1,
-    reltol = .Machine$double.eps^2 ))
-params.out &lt;- g3_tmb_relist(params.in, out$par)
-fit &lt;- gadgetutils::g3_fit(model_code, params.out)</code></pre>
+# TODO:
+#out &lt;- optim(par = obj.fn$par, fn = obj.fn$fn, gr = obj.fn$gr, method = &#39;BFGS&#39;, control = list(
+#    maxit = 1000,
+#    trace = 1,
+#    reltol = .Machine$double.eps^2 ))
+#params.out &lt;- g3_tmb_relist(params.in, out$par)
+#fit &lt;- gadgetutils::g3_fit(model_code, params.out)</code></pre>
 </div>
 </div>
 </div>

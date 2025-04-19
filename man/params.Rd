@@ -15,10 +15,13 @@ g3_parameterized(
         by_year = FALSE,
         by_step = FALSE,
         by_age = FALSE,
+        by_area = FALSE,
+        prepend_extra = list(),
         exponentiate = FALSE,
         avoid_zero = FALSE,
         scale = 1,
         offset = 0,
+        ifmissing = NULL,
         ...)
 }
 
@@ -66,6 +69,23 @@ g3_parameterized(
       \item{TRUE}{Produce a \code{"name.4"} parameter for each age of the stock(s) in \var{by_stock}}
     }
   }
+  \item{by_area}{
+    Should there be individual parameters per stock area?
+    \describe{
+      \item{FALSE}{No}
+      \item{TRUE}{Produce a \code{"name.area"} parameter for each area of the stock(s) in \var{by_stock}}
+    }
+  }
+  \item{prepend_extra}{
+    List of extra things to prepend to the parameter name.
+    Can be a string, or a stock object.
+    See \code{\link{stock_prepend}}, which \var{prepend_extra} is passed to
+  }
+  \item{ifmissing}{
+    Value to use for when there is no valid parameter (read: year when by_year = TRUE)
+    Either a numeric constant or character.
+    If character, add another parameter for ifmissing, using the same \var{by_stock} value.
+  }
   \item{exponentiate}{Use \code{exp(value)} instead of the raw parameter value. Will add "_exp" to the parameter name.}
   \item{avoid_zero}{If TRUE, wrap parameter with \code{avoid_zero}}
   \item{scale}{
@@ -95,22 +115,56 @@ g3_parameterized(
 
 \examples{
 \dontshow{library(magrittr)}
-stock_a <- g3_stock(c(species = 'stock', 'aaa'), seq(10, 35, 5)) \%>\% g3s_age(1, 10)
-stock_b <- g3_stock(c(species = 'stock', 'bbb'), seq(10, 35, 5)) \%>\% g3s_age(1, 10)
+stock_imm <- g3_stock(c(species = 'stock', 'imm'), seq(10, 35, 5)) \%>\% g3s_age(1, 4)
+stock_mat <- g3_stock(c(species = 'stock', 'mat'), seq(10, 35, 5)) \%>\% g3s_age(3, 6)
 
-# Not by anything, so just a regular parameter
-g3_parameterized('K')
+# Helper function that shows the parameter template for the given parameter
+param_template_for <- function (g3_param) {
+  model_code <- g3_to_tmb(list(
+      # g3a_naturalmortality() isn't important, it is a place to add our parameter
+      g3a_naturalmortality(stock_imm, g3_param),
+      # We also need stock_mat in the model at least once
+      g3a_naturalmortality(stock_mat, 0),
 
-# by_stock, so will use stock_prepend() to rename variables
-g3_parameterized('K', by_stock = TRUE)
+      # Set a year range to use for parameters where relevant
+      g3a_time(1990, 1994) ))
 
-# Adding by_year or by_age turns it into a table
-g3_parameterized('K', by_stock = TRUE, by_year = TRUE, by_age = TRUE)
+  # Extract template, throw away default parameters from g3a_time()
+  params <- attr(model_code, "parameter_template")
+  params <- params[!(rownames(params) \%in\% c('retro_years', 'project_years')),]
+  return(params)
+}
 
-# Can specify the name parts you want
-g3_parameterized('K', by_stock = 'species', by_year = TRUE)
+# Not 'by' anything, so we add a single parameter value
+param_template_for( g3_parameterized('K') )
+
+# Can set defaults for the parameter template when defining a parameter
+param_template_for( g3_parameterized('K', value = 5, lower = 2,
+    upper = 8, optimise = FALSE) )
+
+# by_stock, so the parameters will have the stock name prepended
+param_template_for( g3_parameterized('K', by_stock = TRUE) )
+
+# Similarly, we can prepend year & age
+param_template_for( g3_parameterized('K', by_stock = TRUE, by_year = TRUE, by_age = TRUE) )
+
+# You can specify the name part to use,
+# e.g. if a parameter should be shared between mature and immature:
+param_template_for( g3_parameterized('K', by_stock = 'species', by_year = TRUE) )
 
 # Can give a list of stocks, in which case it works out name parts for you
-g3_parameterized('K', by_stock = list(stock_a, stock_b))
-g3_parameterized('K', by_stock = list(stock_a, stock_b), by_age = TRUE)
+param_template_for( g3_parameterized('K', by_stock = list(stock_imm, stock_mat)) )
+param_template_for( g3_parameterized('K', by_stock = list(stock_imm, stock_mat), by_age = TRUE) )
+
+# If there are no shared name parts, then all names will be added
+param_template_for( g3_parameterized(
+    'btrigger',
+    by_stock = list(g3_fleet("surv"), g3_fleet("comm"))) )
+
+# You can set fixed scale/offset for the parameter
+g3_parameterized('K', scale = 5, offset = 9)
+
+# ...or give names and they will also be parameters, sharing the by_stock setting
+param_template_for( g3_parameterized('K', by_stock = TRUE, scale = "sc", offset = "offs") )
+
 }

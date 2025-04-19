@@ -3,6 +3,7 @@ g3a_mature_continuous <- function (
         l50 = g3_parameterized('mat.l50', by_stock = by_stock),
         beta = 0,
         a50 = 0,
+        bounded = TRUE,
         by_stock = TRUE) {
     # https://gadget-framework.github.io/gadget2/userguide/chap-stock.html#continuous-maturity-function
     # https://github.com/Hafro/gadget2/blob/master/src/maturity.cc#L301-L304
@@ -28,10 +29,16 @@ g3a_mature_continuous <- function (
         return(out);
     }')
 
-    f_substitute(~g3a_mature_continuous(stock__plusdl, M0, stock__growth_l, alpha, beta, cur_step_size), list(
+    out <- f_substitute(~g3a_mature_continuous(stock__plusdl, M0, growth_delta_l, alpha, beta, cur_step_size), list(
         M0 = g3a_mature_constant(alpha, l50, beta, a50),
         alpha = alpha,
         beta = beta))
+    if (bounded) {
+        out <- f_substitute(quote(
+            dif_pminmax(out, 0, 1, 1e5)
+        ), list(out = out))
+    }
+    return(out)
 }
 
 g3a_mature_constant <- function (alpha = NULL, l50 = NA, beta = NULL, a50 = NA, gamma = NULL, k50 = NA) {
@@ -93,7 +100,7 @@ g3a_step_transition <- function(input_stock,
                 # NB: Assuming that there won't be leftover length
                 if (move_remainder) stock_ss(input_stock__transitioning_num) <- stock_ss(input_stock__transitioning_num) - stock_ss(input_stock__transitioning_num) * output_ratio
                 # Back down to mean biomass
-                stock_ss(output_stock__wgt) <- stock_ss(output_stock__wgt) / avoid_zero_vec(stock_ss(output_stock__num))
+                stock_ss(output_stock__wgt) <- stock_ss(output_stock__wgt) / avoid_zero(stock_ss(output_stock__num))
             }))
 
             if (move_remainder) {
@@ -132,7 +139,7 @@ g3a_step_transition <- function(input_stock,
                     # NB: Assuming that there won't be leftover length
                     if (move_remainder) stock_ss(input_stock__transitioning_remainder) <- stock_ss(input_stock__transitioning_remainder) - stock_ss(input_stock__transitioning_num) * output_ratio
                     # Back down to mean biomass
-                    stock_ss(output_stock__wgt) <- stock_ss(output_stock__wgt) / avoid_zero_vec(stock_ss(output_stock__num))
+                    stock_ss(output_stock__wgt) <- stock_ss(output_stock__wgt) / avoid_zero(stock_ss(output_stock__num))
                 }))
             }, list(
                 output_ratio = output_ratios[[n]],

@@ -4,7 +4,8 @@ g3l_tagging_ckmr <- function (
         fleets,
         parent_stocks,
         offspring_stocks,
-        weight = substitute(g3_param(n, optimise = FALSE, value = 1), list(n = paste0(nll_name, "_weight"))),
+        weight = g3_parameterized(paste0(nll_name, "_weight"),
+            optimise = FALSE, value = 1),
         run_at = g3_action_order$likelihood) {
     stopifnot(is.character(nll_name))
     stopifnot(is.list(fleets) && all(sapply(fleets, g3_is_stock)))
@@ -63,17 +64,19 @@ g3l_tagging_ckmr <- function (
         })))
     }
     for (predstock in fleets) {
-        predstock_var <- as.symbol(paste0('prey_stock__predby_', predstock$name))
-
         for (prey_stock in c(parent_stocks, offspring_stocks)) {
+            # NB: In lockstep with action_predate()
+            predprey <- g3s_stockproduct(prey_stock, predator = predstock, ignore_dims = c('predator_area'))
+            predprey__cons <- g3_stock_instance(predprey, desc = paste0("Total biomass consumption of ", predprey$name))
+
             step_f <- f_concatenate(list(step_f, g3_step(f_substitute(~{
-                stock_iterate(prey_stock, stock_intersect(modelhist, {
+                stock_iterate(prey_stock, stock_interact(predstock, stock_intersect(modelhist, stock_with(predprey, {
                     stock_with(predstock, debug_trace("Convert ", predstock, " catch of ", prey_stock, " to numbers, add it to our total"))
                     stock_ss(modelhist__catch) <- stock_ss(modelhist__catch) +
-                        stock_reshape(modelhist, stock_ss(prey_stock__predby_predstock) / avoid_zero_vec(stock_ss(prey_stock__wgt)))
-                }))
+                        stock_reshape(modelhist, stock_ss(predprey__cons) / avoid_zero(stock_ss(prey_stock__wgt)))
+                }))))
             }, list(
-                prey_stock__predby_predstock = predstock_var)))))
+                end = NULL)))))
         }
     }
     out[[step_id(run_at, 'g3l_tagging', nll_name, 1)]] <- step_f
@@ -93,7 +96,7 @@ g3l_tagging_ckmr <- function (
                   modelhist__offspring_idx := g3_idx(offspring_age - modelhist__minage + 1),
                   mopairs := as_integer(obsdata_pairs[[g3_idx(4), pairs_idx]]),
                   # i.e. # spawned per-parent at this time
-                  fecundity_of_parents := modelhist__spawned[,modelhist__offspring_idx] / avoid_zero_vec(modelhist__spawning[,modelhist__offspring_idx]),
+                  fecundity_of_parents := modelhist__spawned[,modelhist__offspring_idx] / avoid_zero(modelhist__spawning[,modelhist__offspring_idx]),
                   # Convert to a probability using (3.4):-
                   cur_ckmr_p := (fecundity_of_parents[[modelhist__parent_idx]] / modelhist__catch[[modelhist__parent_idx]]) / sum(fecundity_of_parents), {
                     # Pseudo-likelihood as per (4.1)

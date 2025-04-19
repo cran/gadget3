@@ -1,6 +1,7 @@
 ## ----message=FALSE, echo=FALSE------------------------------------------------
 library(gadget3)
 library(dplyr)
+if (nzchar(Sys.getenv('G3_TEST_TMB'))) options(gadget3.tmb.work_dir = gadget3:::vignette_base_dir('work_dir'))
 set.seed(123)
 
 ## ----message=FALSE, echo=FALSE------------------------------------------------
@@ -149,15 +150,66 @@ year    stock    number
 "), stocks = list(st_imm, st_mat))[length = '0:Inf',,]
 
 ## -----------------------------------------------------------------------------
-f_comm <- g3_fleet('comm')
-f_surv <- g3_fleet('surv')
+stocks <- list(
+   g3_stock(c(species = 'fish', 'imm', 'f'), 1:10),
+   g3_stock(c(species = 'fish', 'imm', 'm'), 1:10),
+   g3_stock(c(species = 'fish', 'mat', 'f'), 1:10),
+   g3_stock(c(species = 'fish', 'mat', 'm'), 1:10) )
+
+drop(g3_distribution_preview(read.table(header = TRUE, text="
+year    stock    number
+1999   imm   1000
+1999   mat   4305
+2000   imm   7034
+2000   mat   2381
+"), stocks = stocks))
+
+## -----------------------------------------------------------------------------
+drop(g3_distribution_preview(read.table(header = TRUE, text="
+year    stock    number
+1999   fish_f   1000
+1999   fish_m   4305
+2000   fish_f   7034
+2000   fish_m   2381
+"), stocks = stocks))
+
+## -----------------------------------------------------------------------------
+# NB: Wrong!
+drop(g3_distribution_preview(read.table(header = TRUE, text="
+year    stock    number
+1999   f         1000
+1999   imm       4305
+2000   f         7034
+2000   imm       2381
+"), stocks = stocks))
+
+## -----------------------------------------------------------------------------
+fleets <- list(
+    g3_fleet(c('comm', country = 'se')),
+    g3_fleet(c('comm', country = 'fi')),
+    g3_fleet(c('surv', country = 'se')) )
 
 g3_distribution_preview(read.table(header = TRUE, text="
 year    fleet    number
-1999   f_comm   1000
-1999   f_surv   4305
-2000   f_comm   7034
-2000   f_surv   2381
-2001   f_surv   3913
-"), fleets = list(f_comm, f_surv))[length = '0:Inf',,]
+1999   comm      1000
+1999   surv_se   4305
+2000   comm      7034
+2000   surv_se   2381
+2001   surv_se   3913
+"), fleets = fleets)[length = '0:Inf',,]
+
+## -----------------------------------------------------------------------------
+predators <- list(
+    g3_stock(c('seal', 'imm', 'f'), 10:20),
+    g3_stock(c('seal', 'mat', 'f'), 10:20),
+    g3_stock(c('seal', 'imm', 'm'), 10:20),
+    g3_stock(c('seal', 'mat', 'm'), 10:20) )
+
+drop(g3_distribution_preview(read.table(header = TRUE, text="
+year    predator    number
+1999   seal_f   1000
+1999   seal_m   4305
+2000   seal_f   7034
+2000   seal_m   2381
+"), predators = predators))
 

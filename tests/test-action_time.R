@@ -25,14 +25,20 @@ ok_group("MFDB compatibility", {
         table_name = "temp_wntki",
         class = c("mfdb_group", "mfdb_aggregate"))
 
-    a <- g3a_time(1990, 1997, step_lengths = timestep_quarterly)
+    a <- gadget3:::f_concatenate(
+        g3a_time(1990, 1997, step_lengths = timestep_quarterly),
+        parent = g3_env,
+        wrap_call = call("while", TRUE))
     ok(ut_cmp_identical(
-        as.vector(environment(a[[1]])$step_lengths),
+        as.vector(environment(a)$step_lengths),
         c(3L,3L,3L,3L)), "mfdb::mfdb_timestep_quarterly converted")
 
-    a <- g3a_time(1990, 1997, step_lengths = timestep_biannually)
+    a <- gadget3:::f_concatenate(
+        g3a_time(1990, 1997, step_lengths = timestep_biannually),
+        parent = g3_env,
+        wrap_call = call("while", TRUE))
     ok(ut_cmp_identical(
-        as.vector(environment(a[[1]])$step_lengths),
+        as.vector(environment(a)$step_lengths),
         c(6L,6L)), "mfdb::mfdb_timestep_biannually converted")
 })
 
@@ -113,7 +119,7 @@ ok(ut_cmp_identical(
     rep(FALSE, (1997 - 1990 + 1) * 3)), "cur_year_projection populated")
 ok(ut_cmp_identical(
     attr(result, 'total_years'),
-    1997 - 1990 + 1), "total_years populated")
+    1997L - 1990L + 1L), "total_years populated")
 
 if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
     param_template <- attr(model_cpp, "parameter_template")
@@ -153,7 +159,7 @@ ok_group('even steps', {
         rep(FALSE, (1999 - 1992 + 1) * 3)), "cur_year_projection populated")
     ok(ut_cmp_identical(
         attr(result, 'total_years'),
-        1999 - 1992 + 1), "total_years populated")
+        1999L - 1992L + 1L), "total_years populated")
 
     if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
         model_tmb <- g3_tmb_adfun(model_cpp, params, compile_flags = c("-O0", "-g"))
@@ -194,7 +200,7 @@ ok_group("projection: Project_years = 4", {
         c(rep(FALSE, (1999 - 1992 + 1) * 3), rep(TRUE, 4 * 3))), "cur_year_projection populated")
     ok(ut_cmp_identical(
         attr(result, 'total_years'),
-        1999 - 1992 + 1 + 4), "total_years populated")
+        1999L - 1992L + 1L + 4L), "total_years populated")
 
     if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
         model_tmb <- g3_tmb_adfun(model_cpp, params, compile_flags = c("-O0", "-g"))
@@ -235,7 +241,7 @@ ok_group("projection: retro_years = 3", {
         c(rep(FALSE, (1999 - 1992 + 1 - 3) * 3), rep(TRUE, 0))), "cur_year_projection populated (NB: No projection since we removed years)")
     ok(ut_cmp_identical(
         attr(result, 'total_years'),
-        1999 - 1992 + 1 - 3), "total_years populated")
+        1999L - 1992L + 1L - 3L), "total_years populated")
 
     if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
         model_tmb <- g3_tmb_adfun(model_cpp, params, compile_flags = c("-O0", "-g"))
@@ -336,7 +342,7 @@ ok_group("Short final year: final_year_steps = 1", {
         frac_rep(FALSE, test_total_steps )), "cur_year_projection populated (NB: No projection since we removed years)")
     ok(ut_cmp_identical(
         attr(result, 'total_years'),
-        ceiling(test_total_steps / 3)), "total_years populated (NB: Ignores final_year_steps)")
+        as.integer(ceiling(test_total_steps / 3))), "total_years populated (NB: Ignores final_year_steps)")
 
     if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
         model_tmb <- g3_tmb_adfun(model_cpp, params, compile_flags = c("-O0", "-g"))
@@ -386,7 +392,7 @@ ok_group("1 year forecast from 2nd retro peel: retro_years = 2, project_years = 
             NULL)), "cur_year_projection populated")
     ok(ut_cmp_identical(
         attr(result, 'total_years'),
-        ceiling(test_total_steps / 3)), "total_years populated")
+        as.integer(ceiling(test_total_steps / 3))), "total_years populated")
 
     if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
         model_tmb <- g3_tmb_adfun(model_cpp, params, compile_flags = c("-O0", "-g"))

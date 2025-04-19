@@ -326,22 +326,26 @@ species name.</li>
 in the parameter template. If <code>by_stock = TRUE</code> (the default)
 then we get parameters for both <code>fish_imm.f_surv.l50</code> &amp;
 <code>fish_mat.f_surv.l50</code>:</p>
-<pre class="r"><code>simple_model &lt;- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
+<pre class="r"><code>suppressWarnings({  # NB: The model is incomplete, fish_imm__num isn&#39;t defined
+simple_model &lt;- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
     f_surv,
     stocks,
     suitabilities = g3_suitability_exponentiall50(by_stock = TRUE),
     catchability_f = g3a_predate_catchability_totalfleet(1) )))
+})
 names(attr(simple_model, &quot;parameter_template&quot;))</code></pre>
 <pre><code>## [1] &quot;retro_years&quot;           &quot;fish_imm.f_surv.alpha&quot; &quot;fish_imm.f_surv.l50&quot;  
 ## [4] &quot;fish_mat.f_surv.alpha&quot; &quot;fish_mat.f_surv.l50&quot;   &quot;project_years&quot;</code></pre>
 <p>If <code>by_stock = &#39;species&#39;</code>, then there is a single, shared
 <code>fish.f_surv.l50</code> parameter:</p>
-<pre class="r"><code>simple_model &lt;- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
+<pre class="r"><code>suppressWarnings({  # NB: The model is incomplete, fish_imm__num isn&#39;t defined
+simple_model &lt;- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
     f_surv,
     stocks,
     suitabilities = g3_suitability_exponentiall50(by_stock = &#39;species&#39;),
     catchability_f = g3a_predate_catchability_totalfleet(1) )))
-names(attr(simple_model, &quot;parameter_template&quot;))</code></pre>
+names(attr(simple_model, &quot;parameter_template&quot;))
+})</code></pre>
 <pre><code>## [1] &quot;retro_years&quot;       &quot;fish.f_surv.alpha&quot; &quot;fish.f_surv.l50&quot;  
 ## [4] &quot;project_years&quot;</code></pre>
 <p>The <code>by_stock</code> parameter is just a convenient shortcut to
@@ -349,13 +353,15 @@ change the default settings, if we specify
 <code>g3_parameterized()</code> ourselves we can change the
 parameterization in other ways, for example <code>by_year = TRUE</code>
 gives us per-year <code>l50</code>:</p>
-<pre class="r"><code>simple_model &lt;- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
+<pre class="r"><code>suppressWarnings({  # NB: The model is incomplete, fish_imm__num isn&#39;t defined
+simple_model &lt;- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
     f_surv,
     stocks,
     suitabilities = g3_suitability_exponentiall50(
         l50 = g3_parameterized(&quot;l50&quot;, by_stock = &#39;species&#39;, by_predator = TRUE, by_year = TRUE)),
     catchability_f = g3a_predate_catchability_totalfleet(1) )))
-names(attr(simple_model, &quot;parameter_template&quot;))</code></pre>
+names(attr(simple_model, &quot;parameter_template&quot;))
+})</code></pre>
 <pre><code>## [1] &quot;retro_years&quot;           &quot;fish_imm.f_surv.alpha&quot; &quot;fish.f_surv.l50.1990&quot; 
 ## [4] &quot;fish.f_surv.l50.1991&quot;  &quot;fish.f_surv.l50.1992&quot;  &quot;fish.f_surv.l50.1993&quot; 
 ## [7] &quot;fish.f_surv.l50.1994&quot;  &quot;fish_mat.f_surv.alpha&quot; &quot;project_years&quot;</code></pre>

@@ -24,7 +24,7 @@ g3a_report_stock <- function (report_stock, input_stock, report_f, include_adrep
                 stock_ss(report_instance) <- stock_ss(report_instance) + (report_f)
             }))
             if (include_adreport && cur_time == total_steps) {
-                ADREPORT(report_instance)
+                stock_with(report_stock, ADREPORT(report_instance))
             }
         }
     }, list(
@@ -62,14 +62,33 @@ g3a_report_var <- function (
             var_name)
     }
 
+    if (is.null(defn)) {
+        # No definition available, can't do anything.
+        # Either this is a problem (and the model will stop with Incomplete model)
+        # or we've found a reference to a reporting variable we're about to generate (and there's no point recursing)
+        return(list())
+    }
+
     if (is.array(defn) && 'time' %in% names(dim(defn))) {
         # Array with time, we don't need to modify it
     } else if (is.null(out_prefix)) {
         # out_prefix turned off, don't add history
-    } else if (is.array(defn)) {
-        # Array without time, add time dimension to dims
-        dimnames <- dimnames(defn)
-        if (is.null(dimnames)) dimnames <- lapply(dim(defn), function (x) NULL)
+    } else if (is.array(defn) || is.numeric(defn)) {
+        # Numeric vector / array without time
+        if (is.array(defn)) {
+            inp_var_c <- if (!is.integer(defn)) call("as_numeric_arr", as.symbol(var_name)) else as.symbol(var_name)
+            dimnames <- dimnames(defn)
+            if (is.null(dimnames)) dimnames <- lapply(dim(defn), function (x) NULL)
+        } else {
+            inp_var_c <- if (!is.integer(defn)) call("as_numeric_vec", as.symbol(var_name)) else as.symbol(var_name)
+            # Make a vector of 0 the same size as the incoming vector
+            defn <- array(
+                if (is.integer(defn)) 0L else 0,
+                dim = c(vec = length(defn)) )
+            dimnames <- list(vec = names(defn))
+        }
+
+        # Add time dimension to dims
         dim(defn) <- c(dim(defn), time = 1)
         dimnames(defn) <- c(dimnames, list(time = NULL))
 
@@ -89,7 +108,7 @@ g3a_report_var <- function (
         # Generate code/env to define history report
         hist_var_name <- paste0(out_prefix, var_name)
         x <- f_substitute(quote(
-            if (run_f) hist_var_ss <- var
+            if (run_f) hist_var_ss <- inp_var_c
         ), list(
             hist_var_ss = as.call(c(
                 # "hist_var["
@@ -98,9 +117,9 @@ g3a_report_var <- function (
                 rep(list(quote(x[])[[3]]), length(dim(defn)) - 1),
                 # "cur_time", which is zero-based, needs converting into an index
                 list(quote( g3_idx(cur_time + 1) )))),
-            run_f = run_f,
-            var = as.symbol(var_name)))
-        environment(x)[[hist_var_name]] <- defn
+            inp_var_c = inp_var_c,
+            run_f = run_f ))
+        environment(x)[[hist_var_name]] <- if (is.integer(defn)) defn else as_force_numeric(defn)
 
         out[[step_id(run_at, 0, 'g3a_report_var', hist_var_name)]] <- x
         var_name <- hist_var_name
@@ -157,7 +176,8 @@ g3a_report_history <- function (
 
 g3a_report_detail <- function (actions,
     # NB: We could in theory remove report_detail, but g3_fit looks for it in params
-    run_f = quote( g3_param('report_detail', optimise = FALSE, value = 1L) == 1 ),
+    run_f = quote( g3_param('report_detail', optimise = FALSE, value = 1L,
+        source = "g3a_report_detail") == 1 ),
     abundance_run_at = g3_action_order$report_early,
     run_at = g3_action_order$report) {
     c(
@@ -165,6 +185,11 @@ g3a_report_detail <- function (actions,
             actions = actions,
             var_re = paste(c(
                 '^.+_surveyindices_.+__params$',
+                '^step_lengths$',
+                '^_weight$',  # Likelihood component weightings
+                '^nll_.sparse_.*._(nll|obs_mean|obs_stddev|obs_n|model_sum|model_sqsum|model_n)$',  # Sparse data nll reports
+                '^quota_',  # Report all g3_quota()
+                '^proj_',  # Report all g3_param_project()
                 '^nll$' ), collapse = "|"),
             out_prefix = NULL,  # Don't log history
             run_f = run_f,
@@ -172,13 +197,14 @@ g3a_report_detail <- function (actions,
         g3a_report_history(
             actions = actions,
             var_re = c('__num$', '__wgt$'),
-            out_prefix = "detail_",
+            out_prefix = if (abundance_run_at == g3_action_order$report_early) "dstart_" else "detail_",
             run_f = f_substitute(quote(cur_time <= total_steps && run_f), list(run_f = run_f)),
             run_at = abundance_run_at),
         g3a_report_history(
             actions = actions,
-            var_re = c('__renewalnum$', '__spawnednum$', '__suit_', '__predby_'),
-            out_prefix = "detail_",
+            # NB: __predby_ is the old name for __cons$, and could eventually be removed
+            var_re = c('__renewalnum$', '__spawnednum$', '__cons$', "__suit$", '__suit_', '__predby_'),
+            out_prefix = if (run_at == g3_action_order$report_early) "dstart_" else "detail_",
             run_f = run_f,
             run_at = run_at),
         NULL)

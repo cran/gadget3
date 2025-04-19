@@ -1,6 +1,7 @@
 ## ----message=FALSE, echo=FALSE------------------------------------------------
 library(gadget3)
 library(magrittr)
+if (nzchar(Sys.getenv('G3_TEST_TMB'))) options(gadget3.tmb.work_dir = gadget3:::vignette_base_dir('work_dir'))
 
 ## -----------------------------------------------------------------------------
 get_formula <- function (size) {

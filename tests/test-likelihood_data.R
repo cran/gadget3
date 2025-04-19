@@ -1,3 +1,4 @@
+if (!interactive()) options(warn=2, error = function() { sink(stderr()) ; traceback(3) ; q(status = 1) })
 library(magrittr)
 library(unittest)
 
@@ -5,25 +6,38 @@ library(gadget3)
 
 
 # Helper to generate ld from table string and attributes
-generate_ld <- function (tbl, all_stocks = list(), all_fleets = list(), use_preview = FALSE, ...) {
+generate_ld <- function (tbl, all_stocks = list(), all_fleets = list(), all_predators = list(), model_history = "", use_preview = FALSE, ...) {
     if (is.character(tbl)) tbl <- read.table(text = tbl, header = TRUE, stringsAsFactors = TRUE)
     if (is.null(tbl$number)) tbl$number <- as.numeric(seq_len(nrow(tbl)))
     all_stocks <- lapply(all_stocks, function (x) g3_stock(x, 1))
     if (use_preview) {
         # Use new public preview function
-        out <- list(
-            number = g3_distribution_preview(structure(tbl, ...), stocks = all_stocks, fleets = all_fleets) )
+        out <- list( obs_array = list(
+            num = g3_distribution_preview(structure(tbl, ...), stocks = all_stocks, fleets = all_fleets, predators = all_predators) ))
     } else {
         # Fall back to old behaviour
-        out <- gadget3:::g3l_likelihood_data('ut', structure(tbl, ...), all_stocks = all_stocks, all_fleets = all_fleets)
+        out <- gadget3:::g3l_likelihood_data('ut', structure(tbl, ...), all_stocks = all_stocks, all_fleets = all_fleets, all_predators = all_predators, model_history = model_history)
     }
 
     # NB: A failed merge would result in repeated instances
     ok(ut_cmp_equal(
-        sort(as.numeric(out$number[out$number != 0])),
+        sort(as.numeric(out$obs_array$num[out$obs_array$num != 0])),
         sort(as.numeric(tbl$number)),
         deparse_frame = -2), "number array has all of source data")
     return(out)
+}
+
+# Generate example of ld being stock_iterate()d or stock_intersect()ed
+generate_code <- function(ld, repl_fn, ...) {
+    model_fn <- g3_to_r(list(gadget3:::g3_step(gadget3:::call_to_formula(
+        substitute(
+            extractme(repl_fn_sym(st, stock_ss(st__num, vec = single))),
+            list(repl_fn_sym = as.symbol(repl_fn)) ),
+        list(
+            st = ld$obsstock,
+            st__num = ld$number,
+            ... )))))
+    gadget3:::f_find(body(model_fn), quote(extractme))[[1]][[2]]
 }
 
 # Dig minlen out of modelstock
@@ -51,18 +65,17 @@ cmp_array <- function (ar, table_text) {
 
 
 ok_group('g3l_likelihood_data:unknown', {
-    ok(ut_cmp_error({
-        ld <- generate_ld(
-            data.frame(
-                year = 1990,
-                camel = 3,
-                dromedary = 1,
-                number = 1:3,
-                stringsAsFactors = FALSE),
-            end = NULL)
-    }, "camel, dromedary"), "Unrecognised camels columns")
+    ld <- generate_ld(
+        data.frame(
+            year = 1990:1992,
+            number = 1:3,
+            camel = 10:12,
+            stringsAsFactors = FALSE),
+        end = NULL)
+    ok(ut_cmp_equal(ld$obs_array, list(
+        num = array(1:3, dim = c(length = 1L, time = 3L), dimnames = list(length = "0:Inf", time = c("1990", "1991", "1992"))),
+        camel = array(10:12, dim = c(length = 1L, time = 3L), dimnames = list(length = "0:Inf", time = c("1990", "1991", "1992"))) )), "Will create arrays from any unknown columns")
 })
-
 
 ok_group('g3l_likelihood_data:time', {
     ok(ut_cmp_error({
@@ -79,7 +92,7 @@ ok_group('g3l_likelihood_data:time', {
         2002 2
         2001 3
     ")
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length time Freq
           0:Inf 1998    1
           0:Inf 2001    3
@@ -94,7 +107,7 @@ ok_group('g3l_likelihood_data:time', {
         2000    1      4
         2000    2      5
     ")
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length    time Freq
           0:Inf 1998-01    1
           0:Inf 1998-02    2
@@ -109,7 +122,7 @@ ok_group('g3l_likelihood_data:time', {
         2002 2
         2001 3
     ")
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length time Freq
           0:Inf 1998    1
           0:Inf 2001    3
@@ -123,7 +136,7 @@ ok_group('g3l_likelihood_data:time', {
         1999-01 3
         1999-02 9
     ")
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length time Freq
           0:Inf 1998-01    2
           0:Inf 1998-02    4
@@ -139,7 +152,7 @@ ok_group('g3l_likelihood_data:length', {
         2000      2
         2001      3
     ")
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length time Freq
           0:Inf 1999    1
           0:Inf 2000    2
@@ -161,7 +174,7 @@ ok_group('g3l_likelihood_data:length', {
         2000     30     11
         2001     30     12
     ")
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length time Freq
            1:5 1999    1
           5:10 1999    4
@@ -212,7 +225,7 @@ ok_group('g3l_likelihood_data:length', {
             a = structure(quote(seq(10, 20)), min = 10, max = 20),
             b = structure(quote(seq(20, 40)), min = 20, max = 40),
             c = structure(quote(seq(40, 80)), min = 40, max = 80)))
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length time   Freq
          10:20 1999 1999.1
          20:40 1999 1999.2
@@ -247,7 +260,7 @@ ok_group('g3l_likelihood_data:length', {
             b = structure(quote(seq(20, 40)), min = 20, max = 40),
             c = structure(quote(seq(40, 80)), min = 40, max = 80) ),
         use_preview = TRUE )
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length time   Freq
          10:20 1999 1999.1
          20:40 1999 1999.2
@@ -275,7 +288,7 @@ ok_group('g3l_likelihood_data:length', {
             a = structure(quote(seq(10, 20)), min = 10, max = 20),
             b = structure(quote(seq(20, 40)), min = 20, max = 40),
             c = structure(quote(seq(40, 80)), min = 40, max = 80, max_open_ended = TRUE)))
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length time   Freq
          10:20 1999 1999.1
          20:40 1999 1999.2
@@ -366,7 +379,7 @@ ok_group('g3l_likelihood_data:age_char', {
         length = as.character(cut(seq(3, 47, by=5), seq(0, 50, by = 5), right = FALSE)),
         age = 1:2,
         stringsAsFactors = FALSE))
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length  age time   Freq
            0:5 age1 1990    1
           5:10 age1 1990    2
@@ -393,7 +406,7 @@ ok_group('g3l_likelihood_data:age_char', {
         length = as.character(cut(seq(3, 47, by=5), seq(0, 50, by = 5), right = FALSE)),
         age = c('[1,3]', '[4,9]'),
         stringsAsFactors = FALSE))
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length  age time   Freq
            0:5 1:3 1990    1
           5:10 1:3 1990    2
@@ -426,7 +439,7 @@ ok_group('g3l_likelihood_data:age_char', {
             rep(2, 9),
             NULL),
         stringsAsFactors = FALSE))
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length  age time   Freq
            0:5 age1 1990    0
           5:10 age1 1990    0
@@ -452,8 +465,8 @@ ok_group('g3l_likelihood_data:age_char', {
         year = 1990,
         length = cut(c(4, 14, 28, 33, 33, 44), c(seq(0, 50, by = 10), Inf), right = FALSE),
         stringsAsFactors = TRUE))
-    ld_loopback <- generate_ld(as.data.frame.table(ld$number, responseName = 'number'))
-    ok(ut_cmp_equal(ld$number, ld_loopback$number), "Can parse our own output")
+    ld_loopback <- generate_ld(as.data.frame.table(ld$obs_array$num, responseName = 'number'))
+    ok(ut_cmp_equal(ld$obs_array$num, ld_loopback$obs_array$num), "Can parse our own output")
 })
 
 ok_group('g3l_likelihood_data:age', {
@@ -467,7 +480,7 @@ ok_group('g3l_likelihood_data:age', {
           4 2001      2001.4
           6 2001      2001.6
         ")
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length  age time   Freq
           0:Inf age3 1999 1999.3
           0:Inf age4 1999 1999.4
@@ -495,7 +508,7 @@ ok_group('g3l_likelihood_data:age', {
             x = structure(quote(seq(1, 3)), min = 1, max = 3),
             y = structure(quote(seq(4, 6)), min = 4, max = 6),
             z = structure(quote(seq(7, 10)), min = 7, max = 10)))
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length  age time   Freq
           0:Inf 1:3 1999 1999.1
           0:Inf 4:6 1999 1999.2
@@ -512,6 +525,34 @@ ok_group('g3l_likelihood_data:age', {
         gadget3:::force_vector("1:3" = 1L, "4:6" = 4L, "7:10" = 7L)), "agegroups using minages from attribute")
 })
 
+ok_group('g3l_likelihood_data:agegroup') ###########
+ld <- generate_ld(expand.grid(
+     year = 2000:2005,
+     length = c(1,5,10),
+     age = c("[1,2)", "[3,3)")  )) # ((
+ok(gadget3:::ut_cmp_code(generate_code(ld, 'stock_intersect', age = 1, cur_year = 1999, cur_step = 1), quote({
+    ut_obs__time_idx <- intlookup_getdefault(ut_obs__times, (cur_year *
+        100L + cur_step * 0L), -1L)
+    if (ut_obs__time_idx >= (1L)) {
+        for (ut_obs__agegroup_idx in seq_along(ut_obs__minages)) {
+            `_age` <- ut_obs__minages[[ut_obs__agegroup_idx]]
+            for (ut_obs__length_idx in seq_along(ut_obs__minlen)) {
+                length <- ut_obs__midlen[[ut_obs__length_idx]]
+                ut_obs__num[ut_obs__length_idx, ut_obs__agegroup_idx,
+                  ut_obs__time_idx]
+            }
+        }
+    }
+}), optimize = TRUE), "stock_intersect: Renamed all vars, including ut_obs__agegroup")
+
+ok(ut_cmp_equal(
+    g3_eval(attr(ld$obsstock$env$ut_obs__agegroup, "g3_global_init_val")),
+    structure(
+        list(1L, 2L, 2L),
+        key_var = "ut_obs__agegroup_keys",
+        value_var = "ut_obs__agegroup_values" )), "ut_obs__agegroup: Sub-parts also renamed")
+
+########### g3l_likelihood_data:agegroup
 
 ok_group('g3l_likelihood_data:age_factor', {
     df <- data.frame(
@@ -522,7 +563,7 @@ ok_group('g3l_likelihood_data:age_factor', {
     df$age <- cut(df$age, seq(3, 10, by = 1), right = FALSE)
     df <- aggregate(number ~ year + age, df, sum)
     ld <- generate_ld(df)
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length age time Freq
          0:Inf 3:3 1990    2
          0:Inf 4:4 1990    1
@@ -531,19 +572,19 @@ ok_group('g3l_likelihood_data:age_factor', {
          0:Inf 7:7 1990    0
          0:Inf 8:8 1990    0
          0:Inf 9:9 1990    0
-     "), "ld$number: included all single ages")
+     "), "ld$obs_array$num: included all single ages")
 
     ld <- generate_ld(data.frame(
         year = 1990,
         age = as.factor(c(3,4,5,8)),
         stringsAsFactors = TRUE))
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length age time Freq
         0:Inf 3:3 1990    1
         0:Inf 4:4 1990    2
         0:Inf 5:7 1990    3
         0:Inf 8:8 1990    4
-     "), "ld$number: can also use integer strings as factors")
+     "), "ld$obs_array$num: can also use integer strings as factors")
 
     df <- data.frame(
         year = 1990,
@@ -553,11 +594,11 @@ ok_group('g3l_likelihood_data:age_factor', {
     df$age <- cut(df$age, seq(2, 10, by = 4), right = FALSE)
     df <- aggregate(number ~ year + age, df, sum)
     ld <- generate_ld(df)
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length age time Freq
          0:Inf 2:5 1990    4
          0:Inf 6:9 1990    0
-     "), "ld$number: Everything grouped into first group, second compared to zero")
+     "), "ld$obs_array$num: Everything grouped into first group, second compared to zero")
 })
 
 
@@ -597,7 +638,7 @@ ok_group('g3l_likelihood_data:area', {
           1 2001      2001.1
           2 2001      2001.2
         ")
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length time area   Freq
           0:Inf 1999    1 1999.1
           0:Inf 2000    1    0.0
@@ -620,7 +661,7 @@ ok_group('g3l_likelihood_data:area', {
           a 2001      2001.1
           b 2001      2001.2
         "), area_group = list(a = 3, b = 4, c = c(1:2)))
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length time area   Freq
           0:Inf 1999    a 1999.1
           0:Inf 2000    a    0.0
@@ -646,7 +687,7 @@ ok_group('g3l_likelihood_data:tag', {
           a 2001      2001.1
           b 2001      2001.2
         "))
-    ok(cmp_array(ld$number, "
+    ok(cmp_array(ld$obs_array$num, "
         length    tag time   Freq
         0:Inf        a 1999 1999.1
         0:Inf        b 1999 1999.2
@@ -674,7 +715,7 @@ ok_group('g3l_likelihood_data:stock', {
           4 2001      2001.4
           6 2001      2001.6
         ")
-    ok(is.null(ld$stock_map), "No stock column, so no stock map")
+    ok(is.null(ld$maps$stock), "No stock column, so no stock map")
 
     ok(ut_cmp_error(generate_ld("
         age year stock stock_re number
@@ -691,8 +732,8 @@ ok_group('g3l_likelihood_data:stock', {
           4 2001    b  2001.4
           6 2001    b  2001.6
         ", all_stocks = c('a', 'b'))
-    ok(ut_cmp_identical(dimnames(ld$number)[['stock']], c("a", "b")), "Array has stocks a & b")
-    ok(ut_cmp_identical(ld$stock_map, list(a = 1L, b = 2L)), "stock_map is 1:1 mapping")
+    ok(ut_cmp_identical(dimnames(ld$obs_array$num)[['stock']], c("a", "b")), "Array has stocks a & b")
+    ok(ut_cmp_identical(ld$maps$stock, c(a = 'a', b = 'b')), "stock_map is 1:1 mapping")
 
     ok(ut_cmp_error(generate_ld("
         age year stock number
@@ -717,17 +758,31 @@ ok_group('g3l_likelihood_data:stock', {
           6 2000    ^stock_imm  2000.6
           4 2001    ^stock_imm  2001.4
           6 2001    ^stock_mat  2001.6
-        ", all_stocks = stock_names)
+        ", all_stocks = stock_names, model_history = "late")
     ok(ut_cmp_identical(
-        dimnames(ld$number)[['stock_re']],
+        dimnames(ld$obs_array$num)[['stock_re']],
         c("_f$", "^stock_mat", "^stock_imm")), "Array names are regexes")
     ok(ut_cmp_identical(
-        ld$stock_map,
-        list(
-            stock_imm_f = 1L,
-            stock_imm_m = 3L,
-            stock_mat_f = 1L,
-            stock_mat_m = 2L)), "Stock map used first regexes first")
+        ld$maps$stock,
+        c(
+            stock_imm_f = '_f$',
+            stock_imm_m = '^stock_imm',
+            stock_mat_f = '_f$',
+            stock_mat_m = '^stock_mat')), "Stock map used first regexes first")
+
+    # Generated intersect code works
+    model_fn <- g3_to_r(list(
+        g3a_time(1999, 2000),
+        gadget3:::g3_step(g3_formula(
+            stock_iterate(ms, stock_intersect(os, print(c(stock_ss(ms__x), stock_ss(os__x))))),
+            ms = ld$modelstock,
+            os = ld$obsstock,
+            ms__x = g3_stock_instance(ld$modelstock, seq_len(prod(unlist(ld$modelstock$dim)))),
+            os__x = g3_stock_instance(ld$obsstock, seq_len(prod(unlist(ld$obsstock$dim))) * 10) )),
+            NULL ))
+    ok(ut_cmp_identical(
+        capture.output(invisible(model_fn())),
+        paste0("[1]  ", 1:24, " ", 1:24 * 10)), "model_fn: Loop / intersect over modelstock/obsstock correctly")
 
     ok(ut_cmp_error(generate_ld("
         age year stock_re number
@@ -753,16 +808,171 @@ ok_group('g3l_likelihood_data:stock', {
           6 2001    _mat_f$  2001.6
         ", all_stocks = stock_names)
     ok(ut_cmp_identical(
-        dimnames(ld$number)[['stock_re']],
+        dimnames(ld$obs_array$num)[['stock_re']],
         c("_mat_f$", "_imm_f$")), "Array names are regexes")
     ok(ut_cmp_identical(
-        ld$stock_map,
-        list(
-            stock_imm_f = 2L,
-            stock_imm_m = NULL,
-            stock_mat_f = 1L,
-            stock_mat_m = NULL)), "Stock map ignored unused stocks")
+        ld$maps$stock,
+        c(
+            stock_imm_f = '_imm_f$',
+            stock_imm_m = NA,
+            stock_mat_f = '_mat_f$',
+            stock_mat_m = NA )), "Stock map ignored unused stocks")
 })
+
+ok_group('g3l_likelihood_data:stock:name_parts', {
+    stock_groupings <- function (stock_names, stock_cols) {
+        tbl <- expand.grid(number = 0, stock = stock_cols, age = 3:6, year = 1999:2001)
+        tbl$number <- seq_len(nrow(tbl))
+        ld <- generate_ld(tbl, all_stocks = stock_names)
+        return(ld$maps$stock)
+    }
+    out <- stock_groupings(
+        list(c('fish', 'imm'), c('fish', 'mat'), c('fish', 'sen')),
+        c('fish'))
+    ok(ut_cmp_equal(out, c(
+        fish_imm = 'fish',
+        fish_mat = 'fish',
+        fish_sen = 'fish' )), '"fish": Groups both maturity groups together')
+
+    out <- stock_groupings(
+        list(c('fish', 'imm'), c('fish', 'mat'), c('fish', 'sen')),
+        c('fish_mat', 'fish'))
+    ok(ut_cmp_equal(out, c(
+        fish_imm = 'fish',
+        fish_mat = 'fish_mat',
+        fish_sen = 'fish' )), '"fish_mat": Overrides "fish" group due to longer length')
+
+    out <- stock_groupings(
+        list(c('a', 'imm'), c('a', 'mat'), c('b', 'imm'), c('b', 'mat'), c('c', 'mat')),
+        c('a', 'b', 'mat'))
+    ok(ut_cmp_equal(out, c(
+        a_imm = 'a',
+        a_mat = 'a',
+        b_imm = 'b',
+        b_mat = 'b',
+        c_mat = 'mat' )), "'b' wins over 'mat' because it comes first")
+
+    out <- stock_groupings(
+        list(c('a', 'imm'), c('a', 'mat'), c('b', 'imm'), c('b', 'mat'), c('c', 'mat')),
+        c('a', 'mat', 'b'))
+    ok(ut_cmp_equal(out, c(
+        a_imm = 'a',
+        a_mat = 'a',
+        b_imm = 'b',
+        b_mat = 'mat',
+        c_mat = 'mat' )), "'mat' wins over 'b' because it comes first")
+
+    out <- stock_groupings(
+        list(c('a', 'imm', 'f'), c('a', 'mat', 'f'), c('a', 'imm', 'm'), c('a', 'mat', 'm'), c('c', 'mat')),
+        c('a_f', 'a_m', 'c'))
+    ok(ut_cmp_equal(out, c(
+        a_imm_f = 'a_f',
+        a_mat_f = 'a_f',
+        a_imm_m = 'a_m',
+        a_mat_m = 'a_m',
+        c_mat = 'c' )), "Name part groupings don't have to be sequential")
+})
+
+ok_group('g3l_likelihood_data:predator', {
+    ld <- generate_ld("
+        age year number
+          3 1999      1999.3
+          4 1999      1999.4
+          6 1999      1999.6
+          3 2000      2000.3
+          6 2000      2000.6
+          4 2001      2001.4
+          6 2001      2001.6
+        ")
+    ok(is.null(ld$maps$predator), "No predator column, so no predator map")
+
+    ok(ut_cmp_error(generate_ld("
+        age year predator predator_re number
+          3 1999    a  a$       1999.3
+        "), "predator.*predator_re"), "Can't have both predator & predator_re")
+
+    ld <- generate_ld("
+        age year predator number
+          3 1999    a  1999.3
+          4 1999    b  1999.4
+          6 1999    a  1999.6
+          3 2000    a  2000.3
+          6 2000    b  2000.6
+          4 2001    b  2001.4
+          6 2001    b  2001.6
+        ", all_predators = list(g3_stock('a', c(0, 10)), g3_stock('b', c(0, 10)) ))
+    ok(ut_cmp_identical(dimnames(ld$obs_array$num)[['predator']], c("a", "b")), "Array has predators a & b")
+    ok(ut_cmp_identical(ld$maps$predator, c(a = 'a', b = 'b')), "predator_map is 1:1 mapping")
+
+    # Generate a list of predators "predator_(trawl|gil)_(f|m)"
+    predators <- lapply(paste(
+        'predator',
+        rep(c('trawl', 'gil'), each = 2),
+        c('is', 'no'),
+        sep = "_"), function (x) g3_stock(x, 1))
+    ld <- generate_ld("
+        age year predator_re number
+          3 1999    _is$  1999.3
+          4 1999    ^predator_trawl  1999.4
+          6 1999    ^predator_gil  1999.6
+          3 2000    ^predator_trawl  2000.3
+          6 2000    ^predator_gil  2000.6
+          4 2001    ^predator_gil  2001.4
+          6 2001    ^predator_trawl  2001.6
+        ", all_predators = predators)
+    ok(ut_cmp_identical(
+        dimnames(ld$obs_array$num)[['predator_re']],
+        c("_is$", "^predator_trawl", "^predator_gil")), "Array names are regexes")
+    ok(ut_cmp_identical(
+        ld$maps$predator,
+        c(
+            predator_trawl_is = '_is$',
+            predator_trawl_no = '^predator_trawl',
+            predator_gil_is = '_is$',
+            predator_gil_no = '^predator_gil' )), "predator map used first regexes first")
+
+    # Generate a list of predators "predator_(trawl|gil)_(f|m)"
+    predators <- lapply(paste(
+        'predator',
+        rep(c('trawl', 'gil'), each = 2),
+        c('is', 'no'),
+        sep = "_"), function (x) g3_stock(x, 1))
+    ld <- generate_ld("
+        age year predator_re number
+          3 1999    _gil_is$  1999.3
+          4 1999    _gil_is$  1999.4
+          6 1999    _trawl_is$  1999.6
+          3 2000    _gil_is$  2000.3
+          6 2000    _trawl_is$  2000.6
+          4 2001    _trawl_is$  2001.4
+          6 2001    _gil_is$  2001.6
+        ", all_predators = predators, model_history = "late")
+    ok(ut_cmp_identical(
+        dimnames(ld$obs_array$num)[['predator_re']],
+        c("_gil_is$", "_trawl_is$")), "Array names are regexes")
+    ok(ut_cmp_identical(
+        ld$maps$predator,
+        c(
+            predator_trawl_is = '_trawl_is$',
+            predator_trawl_no = NA,
+            predator_gil_is = '_gil_is$',
+            predator_gil_no = NA )), "predator map ignored unused predators")
+
+    # Generated intersect code works
+    model_fn <- g3_to_r(list(
+        g3a_time(1999, 2000),
+        gadget3:::g3_step(g3_formula(
+            stock_iterate(ms, stock_intersect(os, print(c(stock_ss(ms__x), stock_ss(os__x))))),
+            ms = ld$modelstock,
+            os = ld$obsstock,
+            ms__x = g3_stock_instance(ld$modelstock, seq_len(prod(unlist(ld$modelstock$dim)))),
+            os__x = g3_stock_instance(ld$obsstock, seq_len(prod(unlist(ld$obsstock$dim))) * 10) )),
+            NULL ))
+    ok(ut_cmp_identical(
+        capture.output(invisible(model_fn())),
+        paste0("[1]  ", 1:16, " ", 1:16 * 10) ), "model_fn: Loop / intersect over modelstock/obsstock correctly")
+})
+
 
 ok_group('g3l_likelihood_data:fleet', {
     ld <- generate_ld("
@@ -775,7 +985,7 @@ ok_group('g3l_likelihood_data:fleet', {
           4 2001      2001.4
           6 2001      2001.6
         ")
-    ok(is.null(ld$fleet_map), "No fleet column, so no fleet map")
+    ok(is.null(ld$maps$fleet), "No fleet column, so no fleet map")
 
     ok(ut_cmp_error(generate_ld("
         age year fleet fleet_re number
@@ -791,9 +1001,9 @@ ok_group('g3l_likelihood_data:fleet', {
           6 2000    b  2000.6
           4 2001    b  2001.4
           6 2001    b  2001.6
-        ")
-    ok(ut_cmp_identical(dimnames(ld$number)[['fleet']], c("a", "b")), "Array has fleets a & b")
-    ok(ut_cmp_identical(ld$fleet_map, list(a = 1L, b = 2L)), "fleet_map is 1:1 mapping")
+        ", all_fleets = list(g3_fleet('a'), g3_fleet('b')))
+    ok(ut_cmp_identical(dimnames(ld$obs_array$num)[['fleet']], c("a", "b")), "Array has fleets a & b")
+    ok(ut_cmp_identical(ld$maps$fleet, c(a = 'a', b = 'b')), "fleet_map is 1:1 mapping")
 
     # Generate a list of fleets "fleet_(trawl|gil)_(f|m)"
     fleets <- lapply(paste(
@@ -812,15 +1022,15 @@ ok_group('g3l_likelihood_data:fleet', {
           6 2001    ^fleet_trawl  2001.6
         ", all_fleets = fleets)
     ok(ut_cmp_identical(
-        dimnames(ld$number)[['fleet_re']],
+        dimnames(ld$obs_array$num)[['fleet_re']],
         c("_is$", "^fleet_trawl", "^fleet_gil")), "Array names are regexes")
     ok(ut_cmp_identical(
-        ld$fleet_map,
-        list(
-            fleet_trawl_is = 1L,
-            fleet_trawl_no = 2L,
-            fleet_gil_is = 1L,
-            fleet_gil_no = 3L)), "fleet map used first regexes first")
+        ld$maps$fleet,
+        c(
+            fleet_trawl_is = '_is$',
+            fleet_trawl_no = '^fleet_trawl',
+            fleet_gil_is = '_is$',
+            fleet_gil_no = '^fleet_gil' )), "fleet map used first regexes first")
 
     # Generate a list of fleets "fleet_(trawl|gil)_(f|m)"
     fleets <- lapply(paste(
@@ -837,15 +1047,94 @@ ok_group('g3l_likelihood_data:fleet', {
           6 2000    _trawl_is$  2000.6
           4 2001    _trawl_is$  2001.4
           6 2001    _gil_is$  2001.6
-        ", all_fleets = fleets)
+        ", all_fleets = fleets, model_history = "late")
     ok(ut_cmp_identical(
-        dimnames(ld$number)[['fleet_re']],
+        dimnames(ld$obs_array$num)[['fleet_re']],
         c("_gil_is$", "_trawl_is$")), "Array names are regexes")
     ok(ut_cmp_identical(
-        ld$fleet_map,
-        list(
-            fleet_trawl_is = 2L,
-            fleet_trawl_no = NULL,
-            fleet_gil_is = 1L,
-            fleet_gil_no = NULL)), "fleet map ignored unused fleets")
+        ld$maps$fleet,
+        c(
+            fleet_trawl_is = '_trawl_is$',
+            fleet_trawl_no = NA,
+            fleet_gil_is = '_gil_is$',
+            fleet_gil_no = NA )), "fleet map ignored unused fleets")
+
+    # Generated intersect code works
+    model_fn <- g3_to_r(list(
+        g3a_time(1999, 2000),
+        gadget3:::g3_step(g3_formula(
+            stock_iterate(ms, stock_intersect(os, print(c(stock_ss(ms__x), stock_ss(os__x))))),
+            ms = ld$modelstock,
+            os = ld$obsstock,
+            ms__x = g3_stock_instance(ld$modelstock, seq_len(prod(unlist(ld$modelstock$dim)))),
+            os__x = g3_stock_instance(ld$obsstock, seq_len(prod(unlist(ld$obsstock$dim))) * 10) )),
+            NULL ))
+    ok(ut_cmp_identical(
+        capture.output(invisible(model_fn())),
+        paste0("[1]  ", 1:16, " ", 1:16 * 10) ), "model_fn: Loop / intersect over modelstock/obsstock correctly")
 })
+
+ok_group('g3l_likelihood_data:predator') ##########
+ld <- generate_ld(expand.grid(
+    length = 5:10,
+    predator_length = c(10, 50, 100),
+    predator_age = c('[0,5)', '[5,10)'), # ((
+    predator_tag = c('a', 'b'),
+    year = 1999:2000 ))
+
+ok(gadget3:::ut_cmp_code(generate_code(ld, 'stock_iterate', cur_year = 1999, cur_step = 1), quote({
+    ut_obs__time_idx <- intlookup_getdefault(ut_obs__times, (cur_year * 100L + cur_step * 0L), -1L)
+    if (ut_obs__time_idx >= (1L)) {
+        for (ut_obs__predator_tag_idx in seq_along(ut_obs__predator_tag_ids)) {
+            predator_tag <- ut_obs__predator_tag_ids[[ut_obs__predator_tag_idx]]
+            for (ut_obs__predator_agegroup_idx in seq_along(ut_obs__predator_minages)) {
+                predator_age <- ut_obs__predator_minages[[ut_obs__predator_agegroup_idx]]
+                for (ut_obs__predator_length_idx in seq_along(ut_obs__predator_midlen)) {
+                  predator_length <- ut_obs__predator_midlen[[ut_obs__predator_length_idx]]
+                  for (ut_obs__length_idx in seq_along(ut_obs__midlen)) {
+                    length <- ut_obs__midlen[[ut_obs__length_idx]]
+                    ut_obs__num[ut_obs__length_idx, ut_obs__predator_length_idx,
+                      ut_obs__predator_agegroup_idx, ut_obs__predator_tag_idx,
+                      ut_obs__time_idx]
+                  }
+                }
+            }
+        }
+    }
+}), optimize = TRUE), "stock_iterate: All predator dimensions included, with prefixed variables")
+
+ok(gadget3:::ut_cmp_code(generate_code(ld, 'stock_intersect', cur_year = 1999, cur_step = 1, predator_tag = 1, predator_length = 1, predator_age = 1), quote({
+    ut_obs__time_idx <- intlookup_getdefault(ut_obs__times, (cur_year * 100L + cur_step * 0L), -1L)
+    if (ut_obs__time_idx >= 1L) {
+        for (ut_obs__predator_tag_idx in seq_along(ut_obs__predator_tag_ids)) {
+            predator_tag <- ut_obs__predator_tag_ids[[ut_obs__predator_tag_idx]]
+            for (ut_obs__predator_agegroup_idx in seq_along(ut_obs__predator_minages)) {
+                `_age` <- ut_obs__predator_minages[[ut_obs__predator_agegroup_idx]]
+                for (ut_obs__predator_length_idx in seq_along(ut_obs__predator_minlen)) {
+                  predator_length <- ut_obs__predator_midlen[[ut_obs__predator_length_idx]]
+                  for (ut_obs__length_idx in seq_along(ut_obs__minlen)) {
+                    length <- ut_obs__midlen[[ut_obs__length_idx]]
+                    ut_obs__num[ut_obs__length_idx, ut_obs__predator_length_idx,
+                      ut_obs__predator_agegroup_idx, ut_obs__predator_tag_idx,
+                      ut_obs__time_idx]
+                  }
+                }
+            }
+        }
+    }
+}), optimize = TRUE), "stock_intersect: All predator dimensions included, with prefixed variables")
+
+ok(ut_cmp_equal(
+    ld$obsstock$env$stock__midlen,
+    gadget3:::force_vector(c("5:6" = 5.5, "6:7" = 6.5, "7:8" = 7.5, "8:9" = 8.5, "9:10" = 9.5, "10:Inf" = 10.5)) ), "stock__midlen: prey vars set")
+ok(ut_cmp_equal(
+    ld$obsstock$env$stock__predator_midlen,
+    gadget3:::force_vector(c("10:50" = 30, "50:100" = 75, "100:Inf" = 120)) ), "stock__predator_midlen: predator vars prefixed")
+ok(ut_cmp_equal(
+    environment(attr(ld$obsstock$env$ut_obs__predator_agegroup, "g3_global_init_val"))$ut_obs__predator_agegroup_keys,
+    gadget3:::force_vector(0:9)), "ut_obs__predator_agegroup_keys: initval keys got renamed")
+ok(ut_cmp_equal(
+    environment(attr(ld$obsstock$env$ut_obs__predator_agegroup, "g3_global_init_val"))$ut_obs__predator_agegroup_values,
+    gadget3:::force_vector( rep(1:2, each = 5) )), "ut_obs__predator_agegroup_values: initval values got renamed")
+
+########## g3l_likelihood_data:predator

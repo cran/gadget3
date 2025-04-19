@@ -11,7 +11,7 @@ dist_prop <- function (var_name, over) {
             x = call("stock_ss", var_sym, length = length_idx_sym),
             total = as.symbol(total_var_name),
             idx = as.symbol(gsub('__x$', '__length_idx', var_name))))
-        total_call <- substitute(avoid_zero_vec(rowSums(x)), list(
+        total_call <- substitute(avoid_zero(rowSums(x)), list(
             x = call_append(call("stock_ssinv", var_sym), over[over != 'length'])))
     } else {
         out <- substitute(x / total, list(
@@ -25,7 +25,8 @@ dist_prop <- function (var_name, over) {
     return(out)
 }
 
-g3l_distribution_sumofsquares <- function (over = c('area')) {
+g3l_distribution_sumofsquares <- function (
+        over = c('area', 'predator', 'predator_tag', 'predator_age', 'predator_length')) {
     out <- f_substitute( quote((modelstock_prop - obsstock_prop) ** 2), list(
         modelstock_prop = dist_prop("modelstock__x", c('time', over)),
         obsstock_prop = dist_prop("obsstock__x", c('time', over))))
@@ -45,9 +46,10 @@ g3l_distribution_multinomial <- function (epsilon = 10) {
             data = quote(stock_ss(obsstock__x))))
 
     likely <- substitute(
-        -sum(data * log(logspace_add_vec(
-            dist / avoid_zero(sum(dist)) * 10000,
-            (1 / (length(data) * epsilon)) * 10000) / 10000)), list(
+        -sum(data * log(dif_pmax(
+            dist / avoid_zero(sum(dist)),
+            1 / (length(data) * epsilon),
+            10000 ))), list(
                 data = quote(stock_ss(obsstock__x)),
                 dist = quote(stock_ss(modelstock__x)),
                 epsilon = epsilon))
@@ -59,7 +61,7 @@ g3l_distribution_multinomial <- function (epsilon = 10) {
 
 g3l_distribution_multivariate <- function (rho_f, sigma_f, over = c('area')) {
     multivariate_fn <- g3_native(r = function (x, rho, sigma) {
-        sum(dnorm(rho * lag(x, 1), sqrt(1 - rho**2) * sigma))
+        sum(dnorm(rho * lag(x, 1), 0, sqrt(1 - rho**2) * sigma))
     }, cpp = '[](auto x, Type rho, Type sigma) -> Type { // NB: "auto" because it could be vector<Type> or array<Type>
        // http://kaskr.github.io/adcomp/_book/Densities.html#autoregressive-processes
        using namespace density;
@@ -80,16 +82,17 @@ g3l_distribution_multivariate <- function (rho_f, sigma_f, over = c('area')) {
 g3l_distribution_surveyindices <- function (fit = 'log', alpha = NULL, beta = NULL) {
     stopifnot(fit == 'linear' || fit == 'log')
 
-    N <- if(fit == 'log') ~log(avoid_zero_vec(stock_ss(modelstock__x, time =))) else ~stock_ss(modelstock__x, time = )
-    I <- if(fit == 'log') ~log(avoid_zero_vec(stock_ss(obsstock__x, time =))) else ~stock_ss(obsstock__x, time = )
+    N <- if(fit == 'log') ~log(avoid_zero(stock_ss(modelstock__x, time =))) else ~stock_ss(modelstock__x, time = )
+    I <- if(fit == 'log') ~log(avoid_zero(stock_ss(obsstock__x, time =))) else ~stock_ss(obsstock__x, time = )
 
+    avoid_zero <- g3_env$avoid_zero  # Quell CRAN warning
     surveyindices_linreg <- g3_native(r = function (N, I, fixed_alpha, fixed_beta) {
         meanI <- mean(I)
         meanN <- mean(N)
         beta <- if (is.nan(fixed_beta)) sum((I - meanI) * (N - meanN)) / avoid_zero(sum((N - meanN)**2)) else fixed_beta
         alpha <- if (is.nan(fixed_alpha)) meanI - beta * meanN else fixed_alpha
         return(c(alpha, beta))
-    }, cpp = '[&avoid_zero](vector<Type> N, vector<Type> I, Type fixed_alpha, Type fixed_beta) -> vector<Type> {
+    }, cpp = '[](vector<Type> N, vector<Type> I, Type fixed_alpha, Type fixed_beta) -> vector<Type> {
         vector<Type> out(2);
 
         auto meanI = I.mean();
@@ -134,6 +137,7 @@ g3l_distribution_sumofsquaredlogratios <- function (epsilon = 10) {
 
 g3_distribution_preview <- function (
         obs_data,
+        predators = list(),
         fleets = list(),
         stocks = list(),
         area_group = NULL) {
@@ -141,13 +145,20 @@ g3_distribution_preview <- function (
         'preview',
         obs_data,
         missing_val = NA,
+        all_predators = predators,
         all_stocks = stocks,
         all_fleets = fleets,
         area_group = area_group,
         model_history = "" )
-    if (!is.null(ld$number)) return(ld$number)
-    if (!is.null(ld$weight)) return(ld$weight)
-    stop('Could not find output array')
+
+    out <- ld$obs_arrays[[1]]
+
+    # Attach any maps present in output
+    for (i in seq_along(ld$maps)) {
+        attr(out, paste0(names(ld$maps)[[i]], "_map")) <- ld$maps[[i]]
+    }
+
+    return(out)
 }
 
 # Compare model state to observation data
@@ -169,21 +180,24 @@ g3l_distribution <- function (
         fleets = list(),
         stocks,
         function_f,
+        predators = list(),
         transform_fs = list(),
         missing_val = 0,
         area_group = NULL,
         report = FALSE,
         nll_breakdown = FALSE,
-        weight = substitute(
-            g3_param(n, optimise = FALSE, value = 1),
-            list(n = paste0(nll_name, "_weight"))),
+        weight = g3_parameterized(paste0(nll_name, "_weight"),
+            optimise = FALSE, value = 1),
         run_at = g3_action_order$likelihood) {
     stopifnot(is.character(nll_name) && length(nll_name) == 1)
     stopifnot(is.data.frame(obs_data))
     stopifnot(is.list(fleets) && all(sapply(fleets, g3_is_stock)))
+    stopifnot(is.list(predators) && all(sapply(predators, g3_is_stock)))
     stopifnot(is.list(stocks) && all(sapply(stocks, g3_is_stock)))
     stopifnot(rlang::is_formula(function_f))
-    stopifnot(is.list(transform_fs) && all(sapply(transform_fs, rlang::is_formula)))
+    stopifnot(is.list(transform_fs))
+
+    fleetpreds <- c(fleets, predators)
 
     if ("modelstock__time_idx" %in% all.vars(function_f)) {
         # g3l_distribution_surveyindices needs to generate time vectors, so needs time early in dimension list
@@ -229,10 +243,10 @@ g3l_distribution <- function (
 
     out <- new.env(parent = emptyenv())
 
-    # Find name of function user called, error if it was catchdistribution but with missing fleets
+    # Find name of function user called, error if it was catchdistribution but with missing predators
     this_name <- as.character(sys.call()[[1]])
-    if (this_name == "g3l_catchdistribution" && length(fleets) == 0) stop("Fleets must be supplied for g3l_catchdistribution")
-    if (this_name == "g3l_abundancedistribution" && length(fleets) > 0) stop("Fleets must not be supplied for g3l_abundancedistribution")
+    if (this_name == "g3l_catchdistribution" && length(fleetpreds) == 0) stop("fleets/predators must be supplied for g3l_catchdistribution")
+    if (this_name == "g3l_abundancedistribution" && length(fleetpreds) > 0) stop("fleets/predators must not be supplied for g3l_abundancedistribution")
 
     # Find name of function user called, and g3l_substitution function used
     function_f_name <- if (is.call(substitute(function_f))) as.character(substitute(function_f)[[1]]) else "custom"
@@ -241,146 +255,126 @@ g3l_distribution <- function (
     # Add our called name / function name to labels & nll_name
     prefix <- paste0(this_name, "_", function_f_name, ": ")
     nll_name <- paste(
-        if (length(fleets) > 0) 'cdist' else 'adist',
+        if (length(fleetpreds) > 0) 'cdist' else 'adist',
         function_f_name,
         nll_name,
         sep = "_")
 
     # Convert data to stocks
-    ld <- g3l_likelihood_data(nll_name, obs_data, missing_val = missing_val, area_group = area_group, model_history = model_history, all_stocks = stocks, all_fleets = fleets)
+    ld <- g3l_likelihood_data(nll_name, obs_data, missing_val = missing_val, area_group = area_group, model_history = model_history, all_stocks = stocks, all_fleets = fleets, all_predators = predators)
     modelstock <- ld$modelstock
     obsstock <- ld$obsstock
-    if (!is.null(ld$number)) {
-        modelstock__num <- g3_stock_instance(modelstock, 0)
-        obsstock__num <- g3_stock_instance(obsstock, ld$number)
-    }
-    if (!is.null(ld$weight)) {
-        modelstock__wgt <- g3_stock_instance(modelstock, 0)
-        obsstock__wgt <- g3_stock_instance(obsstock, ld$weight)
+
+    # Add arrays we'll be saving into to environment
+    for (obs_name in names(ld$obs_arrays)) {
+        assign(paste0("modelstock__", obs_name), g3_stock_instance(modelstock, 0))
+        assign(paste0("obsstock__", obs_name), g3_stock_instance(obsstock, ld$obs_arrays[[obs_name]]))
     }
 
-    # If no fleets, set predstock = NULL, otherwise iterate over fleets
-    for (predstock in (if (length(fleets) > 0) fleets else list(NULL))) for (prey_stock in stocks) {
+    # If no fleets/predators, set predstock = NULL, otherwise iterate over fleets
+    for (predstock in (if (length(fleetpreds) > 0) fleetpreds else list(NULL))) for (prey_stock in stocks) {
         stock <- prey_stock  # Alias stock == prey_stock
 
-        # Work out stock index for obs/model variables
-        if (!is.null(ld$stock_map)) {
-            # Skip over stocks not part of the observation data, map to an index
-            # NB: This is what stock_iterate() would do for us
-            if (is.null(ld$stock_map[[prey_stock$name]])) next
-            stockidx_f <- f_substitute(~g3_idx(x), list(x = ld$stock_map[[prey_stock$name]]))
-        } else {
-            # Not using stock grouping, __stock_idx variable not needed
-            stockidx_f <- ~-1
-        }
+        # NB: In lockstep with action_predate()
+        predprey <- g3s_stockproduct(prey_stock, predator = predstock, ignore_dims = c('predator_area'))
+        predprey__cons <- g3_stock_instance(predprey, desc = paste0("Total biomass consumption of ", predprey$name))
 
-        # Work out fleet index for obs/model variables
-        if (!is.null(ld$fleet_map)) {
-            # Skip over fleets not part of the observation data, map to an index
-            # NB: This is what stock_iterate() would do for us
-            if (is.null(ld$fleet_map[[predstock$name]])) next
-            fleetidx_f <- f_substitute(~g3_idx(x), list(x = ld$fleet_map[[predstock$name]]))
-        } else {
-            # Not using fleet grouping, __predby_fleet__idx variable not needed
-            fleetidx_f <- ~-1
-        }
-
-        # Inner formula to do collection
-        if (is.null(predstock)) {
-            # No fleet -> Compare to abundance
-            collect_f <- f_substitute(~{
-                if (compare_num) {
-                    debug_trace("Add ", prey_stock, " individuals to our count")
-                    stock_ss(modelstock__num) <- stock_ss(modelstock__num) + stock_reshape(modelstock,
-                        transform_f * tform_stock_ss(prey_stock__num))
-                }
-                if (compare_wgt) {
-                    debug_trace("Take ", prey_stock, " total biomass to our count")
-                    stock_ss(modelstock__wgt) <- stock_ss(modelstock__wgt) + stock_reshape(modelstock,
-                        transform_f * tform_stock_ss(prey_stock__num) * tform_stock_ss(prey_stock__wgt))
-                }
-            }, list(
-                compare_num = !is.null(ld$number),
-                compare_wgt = !is.null(ld$weight)))
-        } else {
-            collect_f <- f_substitute(~{
-                if (compare_num) {
-                    debug_trace("Take prey_stock__predby_predstock weight, convert to individuals, add to our count")
-                    stock_ss(modelstock__num) <- stock_ss(modelstock__num) + stock_reshape(modelstock,
-                        transform_f * tform_stock_ss(prey_stock__predby_predstock) / avoid_zero_vec(tform_stock_ss(prey_stock__wgt)))
-                }
-                if (compare_wgt) {
-                    debug_trace("Take prey_stock__predby_predstock weight, add to our count")
-                    stock_ss(modelstock__wgt) <- stock_ss(modelstock__wgt) + stock_reshape(modelstock,
-                        transform_f * tform_stock_ss(prey_stock__predby_predstock))
-                }
-            }, list(
-                compare_num = !is.null(ld$number),
-                compare_wgt = !is.null(ld$weight),
-                prey_stock__predby_predstock = as.symbol(paste0('prey_stock__predby_', predstock$name))))
-        }
-
-        # Wrap with any iteration for transformations
-        transform_f <- quote(1)
-        tform_ss <- list()
-        for (tf_index in seq_along(transform_fs)) {
-            tf_name <- names(transform_fs)[[tf_index]]
-            transform_f <- f_substitute(quote(transform_f * extra_tf), list(
-                transform_f = transform_f,
-                extra_tf = transform_fs[[tf_index]]))
-
-            if (tf_name == 'age') {
-                # NB: This is nearly interact$age, but not quite. We need a different _idx name
-                collect_f <- f_substitute(quote({
-                    # NB: By setting the iterator to preage, we may remove mentions of __age_idx,
-                    #     which will cause stock_iterate() to not loop over age. Force this by
-                    #     explicitly mentioning the index.
-                    comment(prey_stock__age_idx)
-                    for (preage in seq(prey_stock__minage, prey_stock__maxage, by = 1)) g3_with(
-                        prey_stock__preage_idx := g3_idx(preage - prey_stock__minage + 1L),
-                        collect_f)
-                }), list(collect_f = collect_f))
-                # Add extra subset for injection below
-                tform_ss$age <- quote( stock__preage_idx )
+        collect_fs <- list()
+        for (obs_name in names(ld$obs_arrays)) {
+            # Find appropriate formula to start with
+            if (is.null(predstock)) {
+                collect_fs[[obs_name]] <- list(
+                    num = quote( stock_ss(prey_stock__num) ),
+                    wgt = quote( stock_ss(prey_stock__num) * stock_ss(prey_stock__wgt) ),
+                    end = NULL )[[obs_name]]
             } else {
-                stop("Transforms for dimensions other than age not supported yet")
+                collect_fs[[obs_name]] <- list(
+                    num = quote( stock_ss(predprey__cons) / avoid_zero(stock_ss(prey_stock__wgt)) ),
+                    wgt = quote( stock_ss(predprey__cons) ),
+                    end = NULL )[[obs_name]]
+            }
+            if (is.null(collect_fs[[obs_name]])) stop("Unknown column in likelihood data ", obs_name)
+
+            # Wrap collection in any transformations
+            for (tf_index in seq_along(transform_fs)) {
+                tf_name <- names(transform_fs)[[tf_index]]
+                transform_f <- list_to_stock_switch(transform_fs[[tf_index]])
+
+                if (tf_name == 'length') {
+                    # Matrix-multiply length
+                    collect_fs[[obs_name]] <- f_substitute(quote(as.vector(transform_f %*% collect_f)), list(
+                        transform_f = transform_f,
+                        collect_f = collect_fs[[obs_name]] ))
+                } else if (tf_name == 'age') {
+                    collect_fs[[obs_name]] <- call_replace(collect_fs[[obs_name]], stock_ss = function (x) {
+                        # Modify age subset to use previous value
+                        # NB: By setting the iterator to preage, we may remove mentions of __age_idx,
+                        #     which will cause stock_iterate() to not loop over age. Force this by
+                        #     explicitly mentioning the index.
+                        x[['age']] <- quote( prey_stock__preage_idx + 0 * prey_stock__age_idx )
+                        return(x)
+                    })
+                    collect_fs[[obs_name]] <- f_substitute(quote(transform_f * collect_f), list(
+                        transform_f = transform_f,
+                        collect_f = collect_fs[[obs_name]] ))
+                } else {
+                    stop("Transforms for ", tf_name, " dimensions not supported yet")
+                }
+            }
+
+            # Collect into modelstock__x
+            collect_fs[[obs_name]] <- f_substitute(~{
+                debug_trace("Convert ", input_stock, " to ", obs_name)
+                stock_ss(modelstock__x) <- stock_ss(modelstock__x) + stock_reshape(modelstock, collect_f)
+            }, list(
+                input_stock = if (is.null(predstock)) quote(prey_stock) else quote(predprey),
+                obs_name = obs_name,
+                modelstock__x = as.symbol(paste0("modelstock__", obs_name)),
+                collect_f = collect_fs[[obs_name]] ))
+
+            # Surround with any extra loops
+            for (tf_index in seq_along(transform_fs)) {
+                tf_name <- names(transform_fs)[[tf_index]]
+
+                if (tf_name == 'age') {
+                    collect_fs[[obs_name]] <- f_substitute(stock$interact$age, list(
+                        # NB: Rename iterators so we can loop twice over age
+                        interactvar_age = quote( preage ),
+                        stock__age_idx = quote( stock__preage_idx ),
+                        extension_point = collect_fs[[obs_name]] ))
+                    collect_fs[[obs_name]] <- f_substitute(quote( stock_with(stock, collect_f) ), list(
+                        collect_f = collect_fs[[obs_name]] ))
+                }
             }
         }
 
-        # Replace tform_stock_ss, adding in the transform subsets required
-        collect_f <- call_replace(collect_f, tform_stock_ss = function (x) {
-            as.call(c(
-                list(as.symbol("stock_ss"), x[[2]]),
-                tform_ss))
-        })
-        # Add in transform_f now we're done adding bits to it.
-        collect_f <- f_substitute(collect_f, list(transform_f = transform_f))
-
         # Finally iterate/intersect over stock in question
-        out[[step_id(run_at, 'g3l_distribution', nll_name, 1, predstock, prey_stock)]] <- f_optimize(f_substitute(~{
-            if (compare_fleet) debug_label(prefix, "Collect catch from ", predstock, "/", prey_stock, " for ", nll_name)
-            if (!compare_fleet) debug_label(prefix, "Collect abundance from ", stock, " for ", nll_name)
-            stock_iterate(prey_stock, stock_intersect(modelstock, collect_f))
-        }, list(compare_fleet = !is.null(predstock), collect_f = collect_f)))
-
-        # Fix-up stock intersection, add in stockidx_f
-        out[[step_id(run_at, 'g3l_distribution', nll_name, 1, predstock, prey_stock)]] <- f_substitute(out[[step_id(run_at, 'g3l_distribution', nll_name, 1, predstock, prey_stock)]], list(
-            fleetidx_f = fleetidx_f,
-            stockidx_f = stockidx_f))
-        out[[step_id(run_at, 'g3l_distribution', nll_name, 1, predstock, prey_stock)]] <- g3_step(out[[step_id(run_at, 'g3l_distribution', nll_name, 1, predstock, prey_stock)]])
+        out[[step_id(run_at, 'g3l_distribution', nll_name, 1, predstock, prey_stock)]] <- g3_step(f_optimize(f_substitute(~if (weight > 0) {
+            if (compare_fleet) {
+                debug_label(prefix, "Collect catch from ", predstock, "/", prey_stock, " for ", nll_name)
+                stock_iterate(prey_stock, stock_interact(predstock, stock_with(predprey, stock_intersect(modelstock, collect_f)), prefix = "predator"))
+            } else {
+                debug_label(prefix, "Collect abundance from ", stock, " for ", nll_name)
+                stock_iterate(prey_stock, stock_intersect(modelstock, collect_f))
+            }
+        }, list(
+            weight = weight,
+            compare_fleet = !is.null(predstock),
+            collect_f = f_concatenate(collect_fs) ))))
     }
 
     nllstock <- g3_storage(paste("nll", nll_name, sep = "_"))
     if (nll_breakdown) nllstock <- g3s_modeltime(nllstock)
-    if (!is.null(ld$number)) nllstock__num <- g3_stock_instance(nllstock, 0)
-    if (!is.null(ld$weight)) nllstock__wgt <- g3_stock_instance(nllstock, 0)
+    for (obs_name in names(ld$obs_arrays)) {
+        assign(paste0("nllstock__", obs_name), g3_stock_instance(nllstock, 0))
+    }
     nllstock__weight <- g3_stock_instance(nllstock, 0)
     nll <- 0.0
 
     # Generic comparison step with __x instead of __num or __wgt
     compare_f <- g3_step(f_substitute(~{
         debug_label(prefix, "Compare ", modelstock, " to ", obsstock)
-        if (done_aggregating_f) {
+        if (weight > 0 && done_aggregating_f) {
             stock_iterate(modelstock, stock_intersect(obsstock, stock_intersect(nllstock, if (function_comare_f) g3_with(
                 cur_cdist_nll := function_f, {
                 nll <- nll + (weight) * cur_cdist_nll
@@ -398,61 +392,48 @@ g3l_distribution <- function (
         function_f = function_f,
         report = report,
         weight = weight)))
-    compare_f <- f_substitute(compare_f, list(stockidx_f = as.symbol(paste0(modelstock$name, "__stock_idx"))))
 
-    if (!is.null(ld$number)) {
-        out[[step_id(run_at, 'g3l_distribution', nll_name, 3, 'num')]] <-
-            generic_var_replace(compare_f, 'num')
-    }
-
-    if (!is.null(ld$weight)) {
-        out[[step_id(run_at, 'g3l_distribution', nll_name, 3, 'wgt')]] <-
-            generic_var_replace(compare_f, 'wgt')
+    for (obs_name in names(ld$obs_arrays)) {
+        out[[step_id(run_at, 'g3l_distribution', nll_name, 3, obs_name)]] <- generic_var_replace(compare_f, obs_name)
     }
 
     if (!report) return(as.list(out))
 
-    return(c(as.list(out),
-        if (!('modelstock__params' %in% names(environment(function_f)))) NULL else g3a_report_var(
-            "modelstock__params",
-            environment(function_f)$modelstock__params,
-            stock = modelstock,
-            out_prefix = NULL ),
-        if (is.null(ld$number)) NULL else g3a_report_var(
-            "obsstock__num",
-            obsstock__num,
-            stock = obsstock,
-            out_prefix = NULL ),
-        if (is.null(ld$number)) NULL else g3a_report_var(
-            "modelstock__num",
-            modelstock__num,
-            stock = modelstock,
-            out_prefix = NULL ),
-        if (is.null(ld$number)) NULL else g3a_report_var(
-            "nllstock__num",
-            nllstock__num,
-            stock = nllstock,
-            out_prefix = NULL ),
-        if (is.null(ld$weight)) NULL else g3a_report_var(
-            "obsstock__wgt",
-            obsstock__wgt,
-            stock = obsstock,
-            out_prefix = NULL ),
-        if (is.null(ld$weight)) NULL else g3a_report_var(
-            "modelstock__wgt",
-            modelstock__wgt,
-            stock = modelstock,
-            out_prefix = NULL ),
-        if (is.null(ld$weight)) NULL else g3a_report_var(
-            "nllstock__wgt",
-            nllstock__wgt,
-            stock = nllstock,
-            out_prefix = NULL ),
-        g3a_report_var(
-            "nllstock__weight",
-            nllstock__weight,
-            stock = nllstock,
-            out_prefix = NULL ),
+    return(c(
+        as.list(out),
+        lapply(names(ld$obs_arrays), function (obs_name) {
+            g3a_report_var(
+                paste0("obsstock__", obs_name),
+                get(paste0("obsstock__", obs_name)),
+                stock = obsstock,
+                out_prefix = NULL )
+        }),
+        lapply(names(ld$obs_arrays), function (obs_name) {
+            g3a_report_var(
+                paste0("modelstock__", obs_name),
+                get(paste0("modelstock__", obs_name)),
+                stock = modelstock,
+                out_prefix = NULL )
+        }),
+        lapply(names(ld$obs_arrays), function (obs_name) {
+            g3a_report_var(
+                paste0("nllstock__", obs_name),
+                get(paste0("nllstock__", obs_name)),
+                stock = nllstock,
+                out_prefix = NULL )
+        }),
+        list(
+            if (!('modelstock__params' %in% names(environment(function_f)))) NULL else g3a_report_var(
+                "modelstock__params",
+                environment(function_f)$modelstock__params,
+                stock = modelstock,
+                out_prefix = NULL ),
+            g3a_report_var(
+                "nllstock__weight",
+                nllstock__weight,
+                stock = nllstock,
+                out_prefix = NULL ),
+            NULL ),
         NULL))
 }
 g3l_catchdistribution <- g3l_distribution

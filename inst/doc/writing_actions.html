@@ -90,14 +90,17 @@ if (window.hljs) {
 <ul>
 <li><a href="#g3-functions">G3 Functions</a></li>
 <li><a href="#g3-global-environment">G3 global environment</a></li>
-<li><a href="#global-native-functions">Global &amp; native
-functions</a></li>
+<li><a href="#global-native-functions">Global &amp; native functions</a>
+<ul>
+<li><a href="#under-r">Under R</a></li>
+<li><a href="#under-tmb-g3_native">Under TMB: g3_native</a></li>
+</ul></li>
 <li><a href="#stock-steps">Stock steps</a></li>
 <li><a href="#writing-r-code-destined-for-c">Writing R code destined for
 C++</a></li>
 <li><a href="#sub-formulas-and-g3_global_formula">Sub-formulas and
 g3_global_formula</a></li>
-<li><a href="#g3_native">g3_native</a></li>
+<li><a href="#ancillary-steps">Ancillary steps</a></li>
 </ul>
 </div>
 
@@ -118,21 +121,37 @@ helpers.</p>
 </div>
 <div id="global-native-functions" class="section level2">
 <h2>Global &amp; native functions</h2>
-<p>Some things aren’t easy to do with code translation.
-<code>g3_native</code> allows you to define a function with separate R
-and C++ definitions, for example <code>logspace_add_vec</code>, used in
-many actions to avoid div/0, has the following definition:</p>
-<pre><code># vector&lt;Type&gt; form of logspace_add
-g3_env$logspace_add_vec &lt;- g3_native(r = function(a,b) {
-    # https://github.com/kaskr/adcomp/issues/7#issuecomment-642559660
-    pmax(a, b) + log1p(exp(pmin(a,b) - pmax(a, b)))
-}, cpp = &#39;[](vector&lt;Type&gt; a, Type b) -&gt; vector&lt;Type&gt; {
-    vector&lt;Type&gt; res(a.size());
-    for(int i = 0; i &lt; a.size(); i++) {
-        res[i] = logspace_add(a[i], b);
-    }
-    return res;
-}&#39;)</code></pre>
+<div id="under-r" class="section level3">
+<h3>Under R</h3>
+<p>R functions can be included in a formula as anything else,
+<em>provided you use this through R</em>. For example:</p>
+<pre class="r"><code>model_fn &lt;- g3_to_r(list(g3a_time(1990, 1990), g3_formula(
+    nll &lt;- nll + fn(9),
+    fn = function (x) x * 10 )))
+model_fn()</code></pre>
+<p>Your function is now part of the model environment</p>
+<pre class="r"><code>environment(model_fn)$fn</code></pre>
+</div>
+<div id="under-tmb-g3_native" class="section level3">
+<h3>Under TMB: g3_native</h3>
+<p>We do not yet translate functions from TMB to R,however
+<code>g3_native</code> allows you to Some things aren’t easy to do with
+code translation. <code>g3_native</code> allows you to define a function
+with separate R and C++ definitions, for example:</p>
+<pre class="r"><code>normalize_vec &lt;- g3_native(r = function (a) {
+    a / sum(a)
+}, cpp = &#39;[](vector&lt;Type&gt; a) -&gt; vector&lt;Type&gt; {
+    return a / a.sum();
+}&#39;)
+model_fn &lt;- g3_to_r(list(g3a_time(1990, 1990), g3_formula(
+    nll &lt;- nll + normalize_vec(g3_param(&quot;a&quot;)),
+    normalize_vec = normalize_vec )))
+model_fn(c(list(a = 10:20), attr(model_fn, &quot;parameter_template&quot;)))</code></pre>
+<pre class="r"><code>model_code &lt;- g3_to_tmb(list(g3a_time(1990, 1990), g3_formula(
+    nll &lt;- nll + normalize_vec(g3_param(&quot;a&quot;)),
+    normalize_vec = normalize_vec )))
+model_code</code></pre>
+</div>
 </div>
 <div id="stock-steps" class="section level2">
 <h2>Stock steps</h2>
@@ -232,28 +251,52 @@ g3_to_r(list(g3a_naturalmortality(ling_imm, nmort())))</code></pre>
 value ends up in the model report, which will happen automatically for
 any non-constant global in the model.</p>
 </div>
-<div id="g3_native" class="section level2">
-<h2>g3_native</h2>
-<p>There are limits to what the Gadget3 transpilation can manage,
-particularly once you need to operate on matrices. To get around this,
-you can define functions using <code>g3_native</code>, which annotates
-functions with a C++ definition. For example, it is used to define
-<code>logspace_add_vec</code>:</p>
-<pre><code># vector&lt;Type&gt; form of logspace_add
-g3_env$logspace_add_vec &lt;- g3_native(r = function(a,b) {
-    pmax(a, b) + log1p(exp(pmin(a,b) - pmax(a, b)))
-}, cpp = &#39;[](vector&lt;Type&gt; a, Type b) -&gt; vector&lt;Type&gt; {
-    vector&lt;Type&gt; res(a.size());
-
-    for(int i = 0; i &lt; a.size(); i++) {
-        res[i] = logspace_add(a[i], b);
-    }
-
-    // NB: This is a string within R code, so we have to escape slashes.
-    //     For example, &quot;\\n&quot;
-
-    return res;
-}&#39;)</code></pre>
+<div id="ancillary-steps" class="section level2">
+<h2>Ancillary steps</h2>
+<p>Additional steps can be attached to a formula, allowing setup for a
+variable at the beginning of a model, or implicit likelihood components.
+For example:</p>
+<pre class="r"><code>st_imm &lt;- g3_stock(c(&quot;st&quot;, &quot;imm&quot;), 1:10)
+g3_to_r(list(
+    g3a_naturalmortality(
+        st_imm,
+        g3_formula(
+            parrot**2,
+            parrot = 0,
+            &quot;-01:ut:parrot&quot; = g3_formula({
+                parrot &lt;- runif(1)
+            }))),
+    NULL ))</code></pre>
+<pre><code>## function (param = parameter_template) 
+## {
+##     if (is.data.frame(param)) {
+##         param_lower &lt;- structure(param$lower, names = param$switch)
+##         param_upper &lt;- structure(param$upper, names = param$switch)
+##         param &lt;- structure(param$value, names = param$switch)
+##     }
+##     else {
+##         param_lower &lt;- lapply(param, function(x) NA)
+##         param_upper &lt;- lapply(param, function(x) NA)
+##     }
+##     parrot &lt;- 0
+##     st_imm__num &lt;- array(0, dim = c(length = 10L), dimnames = list(length = c(&quot;1:2&quot;, 
+##         &quot;2:3&quot;, &quot;3:4&quot;, &quot;4:5&quot;, &quot;5:6&quot;, &quot;6:7&quot;, &quot;7:8&quot;, &quot;8:9&quot;, &quot;9:10&quot;, 
+##         &quot;10:Inf&quot;)))
+##     while (TRUE) {
+##         {
+##             parrot &lt;- runif(1)
+##         }
+##         {
+##             comment(&quot;Natural mortality for st_imm&quot;)
+##             st_imm__num[] &lt;- st_imm__num[] * (parrot^2)
+##         }
+##     }
+## }
+## &lt;bytecode: 0x56402d49be08&gt;
+## &lt;environment: 0x56402d39a1b8&gt;</code></pre>
+<p>The attached step gets inserted at the beginning of the model, and a
+new random number is chosen for <code>parrot</code> at each model
+timestep.</p>
 </div>
 
 

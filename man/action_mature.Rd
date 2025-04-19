@@ -15,6 +15,7 @@ g3a_mature_continuous(
         l50 = g3_parameterized('mat.l50', by_stock = by_stock),
         beta = 0,
         a50 = 0,
+        bounded = TRUE,
         by_stock = TRUE)
 
 g3a_mature_constant(alpha = NULL, l50 = NA, beta = NULL, a50 = NA, gamma = NULL, 
@@ -45,6 +46,9 @@ g3a_mature(stock, maturity_f, output_stocks, output_ratios = rep(1/length(output
   }
   \item{k50}{
     A \link{formula} to substitute for \eqn{k_{50}}. Must be defined if \var{gamma} is defined.
+  }
+  \item{bounded}{
+    Should the maturity ratio be bounded to 0..1? Set TRUE if maturity is producing negative numbers of individuals.
   }
   \item{by_stock}{
     Change the default parameterisation (e.g. to be by 'species'), see \code{\link{g3_parameterized}}.
@@ -83,12 +87,12 @@ g3a_mature(stock, maturity_f, output_stocks, output_ratios = rep(1/length(output
 
 \value{
   \subsection{g3a_mature_continuous}{A \link{formula} object representing
-    \deqn{ m_0 * (\alpha \Delta{L} + \beta \Delta{t})^\top }
+    \deqn{ m_0 * (\alpha \Delta{L} + \beta {\Delta t})^\top }
 
     \describe{
       \item{\eqn{m_0}}{The \code{\link{g3a_mature_constant}} formula, as defined below, using parameters supplied to \code{\link{g3a_mature_continuous}}}
       \item{\eqn{\Delta{L}}}{Vector of all possible changes in length, as per current growth matrix (see \link{g3a_grow_impl_bbinom})}
-      \item{\eqn{\Delta{t}}}{Length of the current timestep}
+      \item{\eqn{\Delta t}}{Length of current step as a proportion of the year, e.g. 0.25. See \code{cur_step_size} in \code{\link{g3a_time}}}
     }
   }
   \subsection{g3a_mature_constant}{A \link{formula} object with the following equation

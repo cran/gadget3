@@ -60,12 +60,12 @@ g3a_renewal_len_dnorm <- function(
         factor_f = g3a_renewal_initabund(by_stock = by_stock),
         by_stock = TRUE,
         by_age = FALSE) {
-    dnorm <- f_substitute(
-        quote( (stock__midlen - mean_f)/stddev_f ),
-        list(mean_f = mean_f, stddev_f = stddev_f))
     g3_formula(
-        quote( normalize_vec(exp( -(dnorm**2) * 0.5)) * 10000 * factor ),
-        dnorm = dnorm,
+        quote( normalize_vec(ren_dnorm) * 10000 * factor ),
+        ren_dnorm = f_substitute(
+            # NB: sd must be > 0
+            quote(dnorm(stock__midlen, mean_f, avoid_zero(stddev_f))),
+            list(mean_f = mean_f, stddev_f = stddev_f) ),
         factor = factor_f)
 }
 
@@ -201,7 +201,10 @@ g3a_renewal_normalparam <- function (
             scale = g3_parameterized(
                 name = 'rec.scalar',
                 by_stock = by_stock),
-            ifmissing = NaN),
+            ifmissing = g3_parameterized(
+                name = 'rec.proj',
+                optimise = FALSE,
+                by_stock = by_stock )),
         mean_f = g3a_renewal_vonb_t0(by_stock = by_stock),
         stddev_f = g3_parameterized('rec.sd', value = 10, by_stock = by_stock),
         alpha_f = g3_parameterized('walpha', by_stock = wgt_by_stock),
@@ -209,7 +212,7 @@ g3a_renewal_normalparam <- function (
         by_stock = TRUE,
         wgt_by_stock = TRUE,
         run_age = quote(stock__minage),
-        run_projection = FALSE,
+        run_projection = TRUE,
         run_step = 1,
         run_f = NULL,
         run_at = g3_action_order$renewal) {
@@ -241,7 +244,10 @@ g3a_renewal_normalcv <- function (
             scale = g3_parameterized(
                 name = 'rec.scalar',
                 by_stock = by_stock),
-            ifmissing = NaN),
+            ifmissing = g3_parameterized(
+                name = 'rec.proj',
+                optimise = FALSE,
+                by_stock = by_stock )),
         mean_f = g3a_renewal_vonb_t0(by_stock = by_stock),
         cv_f = g3_parameterized('lencv', by_stock = by_stock, value = 0.1,
             optimise = FALSE),
@@ -250,7 +256,7 @@ g3a_renewal_normalcv <- function (
         by_stock = TRUE,
         wgt_by_stock = TRUE,
         run_age = quote(stock__minage),
-        run_projection = FALSE,
+        run_projection = TRUE,
         run_step = 1,
         run_f = NULL,
         run_at = g3_action_order$renewal) {
@@ -266,6 +272,102 @@ g3a_renewal_normalcv <- function (
         run_age = run_age,
         run_projection = run_projection,
         run_step = run_step,
+        run_f = run_f,
+        run_at = run_at)
+}
+
+#######################################  g3a_otherfood
+# Assign number / mean weight based on formulae
+g3a_otherfood <- function (
+        stock,
+        num_f = g3_parameterized('of_abund', by_year = TRUE, by_stock = by_stock,
+            scale = g3_parameterized(
+                'of_abund.step', value = 1, by_step = TRUE, by_stock = by_stock),
+            ifmissing = "of_abund.proj" ),
+        wgt_f = g3_parameterized('of_meanwgt', by_stock = by_stock),
+        by_stock = TRUE,
+        force_lengthvector = !any(grepl("__midlen$", all.vars(num_f))),
+        run_f = quote( cur_time <= total_steps ),
+        run_at = g3_action_order$initial) {
+    stock__num <- g3_stock_instance(stock, 0)
+    stock__wgt <- g3_stock_instance(stock, 1)
+
+    if (force_lengthvector) {
+        # num_f doesn't mention stock__midlen, we should add it
+        num_f <- f_substitute(quote(n + 0 * stock__midlen), list(n = num_f))
+    }
+    out <- list()
+    action_name <- unique_action_name()
+    out[[step_id(run_at, stock, action_name)]] <- g3_step(f_substitute(~{
+        debug_label("g3a_otherfood for ", stock)
+        stock_iterate(stock, if (run_f && renew_into_f) {
+            stock_ss(stock__num) <- num_f
+            stock_ss(stock__wgt) <- wgt_f
+        })
+    }, list(
+        num_f = num_f,
+        wgt_f = wgt_f,
+        renew_into_f = renewal_into(stock),
+        run_f = run_f)))
+    return(out)
+}
+
+# Steps to set up renewal of stocks on first step
+g3a_otherfood_normalparam <- function (
+        stock,
+        factor_f = g3_parameterized(
+            'of_abund', by_year = TRUE, by_stock = by_stock,
+            scale = g3_parameterized(
+                'of_abund.step', value = 1, by_step = TRUE, by_stock = by_stock),
+            ifmissing = "of_abund.proj" ),
+        mean_f = g3a_renewal_vonb_t0(by_stock = by_stock),
+        stddev_f = g3_parameterized('init.sd', value = 10,
+            by_stock = by_stock, by_age = by_age),
+        alpha_f = g3_parameterized('walpha', by_stock = wgt_by_stock),
+        beta_f = g3_parameterized('wbeta', by_stock = wgt_by_stock),
+        by_stock = TRUE,
+        by_age = FALSE,
+        wgt_by_stock = TRUE,
+        run_f = quote( cur_time <= total_steps ),
+        run_at = g3_action_order$initial) {
+
+    # NB: Generate action name with our arguments
+    out <- list()
+    action_name <- unique_action_name()
+    out[[step_id(run_at, stock, action_name)]] <- g3a_otherfood(
+        stock,
+        num_f = g3a_renewal_len_dnorm(mean_f, stddev_f, factor_f),
+        wgt_f = g3a_renewal_wgt_wl(alpha_f, beta_f),
+        run_f = run_f,
+        run_at = run_at)[[1]]
+    return(out)
+}
+
+# normalparam, but with a cv_f instead of stddev_f
+g3a_otherfood_normalcv <- function (
+        stock,
+        factor_f = g3_parameterized(
+            'of_abund', by_year = TRUE, by_stock = by_stock,
+            scale = g3_parameterized(
+                'of_abund.step', value = 1, by_step = TRUE, by_stock = by_stock),
+            ifmissing = "of_abund.proj" ),
+        mean_f = g3a_renewal_vonb_t0(by_stock = by_stock),
+        cv_f = g3_parameterized('lencv', by_stock = by_stock, value = 0.1,
+            optimise = FALSE),
+        alpha_f = g3_parameterized('walpha', by_stock = wgt_by_stock),
+        beta_f = g3_parameterized('wbeta', by_stock = wgt_by_stock),
+        by_stock = TRUE,
+        by_age = FALSE,
+        wgt_by_stock = TRUE,
+        run_f = quote( cur_time <= total_steps ),
+        run_at = g3_action_order$initial) {
+    g3a_otherfood_normalparam(
+        stock = stock,
+        factor_f = factor_f,
+        mean_f = mean_f,
+        stddev_f = f_substitute(quote(mean_f * cv_f), list(mean_f = mean_f, cv_f = cv_f)),
+        alpha_f = alpha_f,
+        beta_f = beta_f,
         run_f = run_f,
         run_at = run_at)
 }

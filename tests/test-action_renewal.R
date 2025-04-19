@@ -7,8 +7,14 @@ cmp_formula <- function (a, b) {
         # NB: Can't order an empty list
         if (length(x) > 0) x[order(names(x))] else x
     }
+    # strip source option from g3_param(), so we don't have to add it to everything below
+    strip_source <- function (in_c) gadget3:::call_replace(in_c,
+        g3_param = function (x) {
+            x$source <- NULL
+            return(x)
+        })
 
-    out <- ut_cmp_identical(rlang::f_rhs(a), rlang::f_rhs(b))
+    out <- ut_cmp_identical(strip_source(rlang::f_rhs(a)), strip_source(rlang::f_rhs(b)))
     if (!identical(out, TRUE)) return(out)
     out <- ut_cmp_identical(ordered_list(environment(a)), ordered_list(environment(b)))
     return(out)
@@ -68,11 +74,11 @@ ok_group('g3a_renewal:run_f default parameterisation', {
     }
 
     ok(ut_cmp_identical(run_cond(), quote(
-        age == fish__minage && cur_step == 1 && (!cur_year_projection)
+        age == fish__minage && cur_step == 1
     )), "No params, got default")
 
     ok(ut_cmp_identical(run_cond(run_age = 5), quote(
-        age == 5 && cur_step == 1 && (!cur_year_projection)
+        age == 5 && cur_step == 1
     )), "Overrode age")
 
     ok(ut_cmp_identical(run_cond(run_age = 2, run_projection = TRUE), quote(
@@ -80,12 +86,16 @@ ok_group('g3a_renewal:run_f default parameterisation', {
     )), "Overrode age & projection")
 
     ok(ut_cmp_identical(run_cond(run_step = 2), quote(
-        age == fish__minage && cur_step == 2 && (!cur_year_projection)
+        age == fish__minage && cur_step == 2
     )), "Overrode run_step")
 
     ok(ut_cmp_identical(run_cond(run_step = NULL), quote(
-        age == fish__minage && (!cur_year_projection)
+        age == fish__minage
     )), "run_step can be turned off entirely")
+
+    ok(ut_cmp_identical(run_cond(run_step = NULL, run_projection = FALSE), quote(
+        age == fish__minage && (!cur_year_projection)
+    )), "run_projection can be turned off")
 })
 
 ok_group('g3a_renewal:default parameterisation', {
@@ -97,12 +107,12 @@ ok_group('g3a_renewal:default parameterisation', {
 
     ok(ut_cmp_identical(renewal_params(), c(
         "fish.rec.1990", "fish.rec.1991", "fish.rec.1992", "fish.rec.1993", "fish.rec.1994",
-        "fish.rec.scalar",
+        "fish.rec.proj", "fish.rec.scalar",
         "fish.rec.sd")), "Default, per-year rec, one scalar property")
 })
 
 ok_group('g3a_initialconditions_normalparam:age_offset', {
-    extract_dnorm <- function (renewal_f, var_sym = as.symbol("dnorm")) {
+    extract_dnorm <- function (renewal_f, var_sym = as.symbol("ren_dnorm")) {
         for (f in gadget3:::f_find(renewal_f[[1]], ":=")) {
             if (f[[2]] == var_sym) return(f[[3]])
         }
@@ -114,16 +124,22 @@ ok_group('g3a_initialconditions_normalparam:age_offset', {
         fish,
         mean_f = quote(m_f),
         stddev_f = quote(stddev)))
-    ok(cmp_formula(out_f, g3_formula(quote(
-        (fish__midlen - m_f)/stddev)
+    ok(gadget3:::ut_cmp_code(out_f, quote(
+        dnorm(
+            fish__midlen,
+            m_f,
+            avoid_zero(stddev) )
     )), "mean_f = m_f, nothing to replace")
 
     out_f <- extract_dnorm(g3a_initialconditions_normalparam(
         fish,
         mean_f = quote(m_f + age - 4),
         stddev_f = quote(stddev)))
-    ok(cmp_formula(out_f, g3_formula(quote(
-        (fish__midlen - (m_f + (age - cur_step_size) - 4))/stddev)
+    ok(gadget3:::ut_cmp_code(out_f, quote(
+        dnorm(
+            fish__midlen,
+            (m_f + (age - cur_step_size) - 4),
+            avoid_zero(stddev) )
     )), "mean_f = m_f + age - 4, replaced inner age")
 
     out_f <- extract_dnorm(g3a_initialconditions_normalparam(
@@ -131,8 +147,11 @@ ok_group('g3a_initialconditions_normalparam:age_offset', {
         mean_f = quote(m_f + age - 4),
         age_offset = 99,
         stddev_f = quote(stddev)))
-    ok(cmp_formula(out_f, g3_formula(quote(
-        (fish__midlen - (m_f + (age - 99) - 4))/stddev)
+    ok(gadget3:::ut_cmp_code(out_f, quote(
+        dnorm(
+            fish__midlen,
+            (m_f + (age - 99) - 4),
+            avoid_zero(stddev) )
     )), "mean_f = m_f + age - 4, overrode age_offset")
 
     out_f <- extract_dnorm(g3a_initialconditions_normalparam(
@@ -140,22 +159,26 @@ ok_group('g3a_initialconditions_normalparam:age_offset', {
         mean_f = quote(m_f + age - 4),
         age_offset = NULL,
         stddev_f = quote(stddev)))
-    ok(cmp_formula(out_f, g3_formula(quote(
-        (fish__midlen - (m_f + age - 4))/stddev)
+    ok(gadget3:::ut_cmp_code(out_f, quote(
+        dnorm(
+            fish__midlen,
+            (m_f + age - 4),
+            avoid_zero(stddev) )
     )), "mean_f = m_f + age - 4, disabled age_offset")
 
     out_f <- extract_dnorm(g3a_initialconditions_normalcv(
         fish,
         mean_f = quote(m_f + age)))
-    ok(cmp_formula(out_f, g3_formula(quote(
-        (fish__midlen - (m_f + (age - cur_step_size)))
-          /
-        ((m_f + (age - cur_step_size)) * g3_param("fish.lencv", value = 0.1, optimise = FALSE))
-    ))), "normalcv: Replaced age in both mean_f & stddev_f")
+    ok(gadget3:::ut_cmp_code(out_f, quote(
+        dnorm(
+            fish__midlen,
+            (m_f + (age - cur_step_size)),
+            avoid_zero(((m_f + (age - cur_step_size)) * g3_param("fish.lencv", value = 0.1, optimise = FALSE, source = "g3a_initialconditions_normalparam") )))
+    )), "normalcv: Replaced age in both mean_f & stddev_f")
 })
 
 ok_group('g3a_initialconditions_cv', {
-    extract_dnorm <- function (renewal_f, var_sym = as.symbol("dnorm")) {
+    extract_dnorm <- function (renewal_f, var_sym = as.symbol("ren_dnorm")) {
         for (f in gadget3:::f_find(renewal_f[[1]], ":=")) {
             if (f[[2]] == var_sym) return(f[[3]])
         }
@@ -163,27 +186,30 @@ ok_group('g3a_initialconditions_cv', {
     }
     fish <- g3s_age(g3_stock('fish', seq(20, 156, 4)), 3, 10)
 
-    ok(cmp_formula(extract_dnorm(g3a_initialconditions_normalparam(fish)), g3_formula(quote(
-        (fish__midlen - (g3_param("fish.Linf", value = 1) * (1 - exp(-1 *
-            g3_param("fish.K", value = 1) * ((age - cur_step_size) - g3_param("fish.t0"))))))
-        / g3_param("fish.init.sd", value = 10)
-    ))), "g3a_initialconditions_normalparam default")
+    ok(gadget3:::ut_cmp_code(extract_dnorm(g3a_initialconditions_normalparam(fish)), quote(
+        dnorm(
+            fish__midlen,
+            (g3_param("fish.Linf", value = 1, source = "g3a_renewal_vonb_t0") * (1 - exp(-1 * g3_param("fish.K", value = 1, source = "g3a_renewal_vonb_t0") * ((age - cur_step_size) - g3_param("fish.t0", source = "g3a_renewal_vonb_t0"))))),
+            avoid_zero(g3_param("fish.init.sd", value = 10, source = "g3a_initialconditions_normalparam")) )
+    )), "g3a_initialconditions_normalparam default")
 
-    ok(cmp_formula(extract_dnorm(g3a_initialconditions_normalcv(fish)), g3_formula(quote(
-        (fish__midlen - (g3_param("fish.Linf", value = 1) * (1 - exp(-1 *
-            g3_param("fish.K", value = 1) * ((age - cur_step_size) - g3_param("fish.t0"))))))
-        / (
-          (g3_param("fish.Linf", value = 1) * (1 - exp(-1 * g3_param("fish.K", value = 1) * ((age - cur_step_size) - g3_param("fish.t0"))))) *
-          g3_param("fish.lencv", value = 0.1, optimise = FALSE))
-    ))), "g3a_initialconditions_normalcv default")
+    ok(gadget3:::ut_cmp_code(extract_dnorm(g3a_initialconditions_normalcv(fish)), quote(
+        dnorm(
+            fish__midlen,
+            (g3_param("fish.Linf", value = 1, source = "g3a_renewal_vonb_t0") * (1 - exp(-1 * g3_param("fish.K", value = 1, source = "g3a_renewal_vonb_t0") * ((age - cur_step_size) - g3_param("fish.t0", source = "g3a_renewal_vonb_t0"))))),
+            avoid_zero(((g3_param("fish.Linf", value = 1, source = "g3a_renewal_vonb_t0") * (1 - exp(-1 * g3_param("fish.K", value = 1, source = "g3a_renewal_vonb_t0") * ((age - cur_step_size) - g3_param("fish.t0", source = "g3a_renewal_vonb_t0")))))
+              *
+            g3_param("fish.lencv", value = 0.1, optimise = FALSE, source = "g3a_initialconditions_normalparam"))) )
+    )), "g3a_initialconditions_normalcv default")
 
-    ok(cmp_formula(extract_dnorm(g3a_renewal_normalcv(fish)), g3_formula(quote(
-        (fish__midlen - (g3_param("fish.Linf", value = 1) * (1 - exp(-1 *
-            g3_param("fish.K", value = 1) * (age - g3_param("fish.t0"))))))
-        / (
-          (g3_param("fish.Linf", value = 1) * (1 - exp(-1 * g3_param("fish.K", value = 1) * (age - g3_param("fish.t0"))))) *
-          g3_param("fish.lencv", value = 0.1, optimise = FALSE))
-    ))), "g3a_renewal_normalcv default")
+    ok(gadget3:::ut_cmp_code(extract_dnorm(g3a_renewal_normalcv(fish)), quote(
+        dnorm(
+            fish__midlen,
+            (g3_param("fish.Linf", value = 1, source = "g3a_renewal_vonb_t0") * (1 - exp(-1 * g3_param("fish.K", value = 1, source = "g3a_renewal_vonb_t0") * (age - g3_param("fish.t0", source = "g3a_renewal_vonb_t0"))))),
+            avoid_zero(((g3_param("fish.Linf", value = 1, source = "g3a_renewal_vonb_t0") * (1 - exp(-1 * g3_param("fish.K", value = 1, source = "g3a_renewal_vonb_t0") * (age - g3_param("fish.t0", source = "g3a_renewal_vonb_t0")))))
+              *
+            g3_param("fish.lencv", value = 0.1, optimise = FALSE, source = "g3a_renewal_len_dnorm"))) )
+    )), "g3a_renewal_normalcv default")
 })
 
 areas <- list(a=1, b=2, c=3, d=4)

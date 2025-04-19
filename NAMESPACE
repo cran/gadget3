@@ -1,4 +1,4 @@
-importFrom("stats", "as.formula", "formula", "dnorm", "lag")
+importFrom("stats", "as.formula", "formula", "dnorm", "rnorm", "lag")
 importFrom("utils", "capture.output", "head", "str", "tail")
 
 # R/aaa_lang.R
@@ -14,6 +14,10 @@ export(g3a_age)
 # R/action_grow.R
 export(g3a_grow_lengthvbsimple)
 export(g3a_grow_weightsimple)
+export(g3a_grow_length_multspec)
+export(g3a_grow_weight_multspec)
+export(g3a_grow_length_weightjones)
+export(g3a_grow_weight_weightjones)
 export(g3a_grow_impl_bbinom)
 export(g3a_growmature)
 
@@ -34,8 +38,12 @@ export(g3a_naturalmortality_exp)
 export(g3a_predate_catchability_totalfleet)
 export(g3a_predate_catchability_numberfleet)
 export(g3a_predate_catchability_linearfleet)
+export(g3a_predate_catchability_project)
 export(g3a_predate_catchability_effortfleet)
 export(g3a_predate_catchability_quotafleet)
+export(g3a_predate_maxconsumption)
+export(g3a_predate_catchability_predator)
+export(g3a_predate)
 export(g3a_predate_fleet)
 export(g3a_predate_totalfleet)
 
@@ -50,6 +58,9 @@ export(g3a_renewal_normalcv)
 export(g3a_initialconditions)
 export(g3a_initialconditions_normalparam)
 export(g3a_initialconditions_normalcv)
+export(g3a_otherfood)
+export(g3a_otherfood_normalparam)
+export(g3a_otherfood_normalcv)
 
 # R/action_report.R
 export(g3a_report_stock)
@@ -61,8 +72,13 @@ export(g3a_spawn_recruitment_fecundity)
 export(g3a_spawn_recruitment_simplessb)
 export(g3a_spawn_recruitment_ricker)
 export(g3a_spawn_recruitment_bevertonholt)
+export(g3a_spawn_recruitment_bevertonholt_ss3)
 export(g3a_spawn_recruitment_hockeystick)
 export(g3a_spawn)
+
+# R/action_spmodel.R
+export(g3a_spmodel_logistic)
+export(g3a_spmodel)
 
 # R/action_tagging.R
 export(g3a_predate_tagrelease)
@@ -73,6 +89,14 @@ export(g3_action_order)
 
 # R/action_time.R
 export(g3a_time)
+
+# R/action_weightloss.R
+export(g3a_weightloss)
+
+# R/array_utils.R
+export(g3_array_agg)
+export(g3_array_combine)
+export(g3_array_plot)
 
 # R/eval.R
 export(g3_eval)
@@ -97,6 +121,11 @@ export(g3l_catchdistribution)
 export(g3l_abundancedistribution)
 export(g3_distribution_preview)
 
+# R/likelihood_sparsesample.R
+export(g3l_sparsesample_linreg)
+export(g3l_sparsesample_sumsquares)
+export(g3l_sparsesample)
+
 # R/likelihood_random.R
 export(g3l_random_dnorm)
 export(g3l_random_walk)
@@ -109,6 +138,19 @@ export(g3l_understocking)
 
 # R/params.R
 export(g3_parameterized)
+
+# R/param_project.R
+export(g3_param_project_dnorm)
+export(g3_param_project_dlnorm)
+export(g3_param_project_rwalk)
+export(g3_param_project_ar1)
+export(g3_param_project_logar1)
+export(g3_param_project)
+
+# R/quota.R
+export(g3_quota_hockeyfleet)
+export(g3_quota_assess)
+export(g3_quota)
 
 # R/run_desc.R
 export(g3_to_desc)

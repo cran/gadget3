@@ -4,26 +4,39 @@ if (!interactive()) options(warn=2, error = function() { sink(stderr()) ; traceb
 
 library(gadget3)
 
-cmp_code <- function (a, b) ut_cmp_identical(deparse(a), deparse(b))
+cmp_code <- function (a, b) ut_cmp_identical(deparse1(a), deparse1(b))
 
 # Generate parameter template for all given parameters (beginning with "ut.")
-param_tmpl <- function (...) {
+param_model <- function (...) {
+    areas <- g3_areas(c('a', 'b', 'c'))
+    stock <- g3_stock(c(species = 'had', sex = 'm', maturity = 'imm'), 1) %>% g3s_age(1, 5) %>% g3s_livesonareas(areas[c('a', 'c')])
+    predstock <- g3_fleet(c(country = 'is', 'comm')) %>% g3s_age(1, 5) %>% g3s_livesonareas(areas[c('a', 'b', 'c')])
+    predprey <- gadget3:::g3s_stockproduct(stock, pred = predstock)
     actions <- c(
         list(g3a_time(1990, 1994)),
         lapply(list(...), function (p) {
             if (is.null(p)) return(~{})
-            x <- 4
-            stock <- g3_stock(c(species = 'had', sex = 'm', maturity = 'imm'), 1)
-            predstock <- g3_fleet(c(country = 'is', 'comm'))
+            stock <- stock
+            predstock <- predstock
+            predprey <- predprey
+            predprey__num <- g3_stock_instance(predprey)
             gadget3:::g3_step(gadget3:::f_substitute(
-                ~{x <- p},
+                ~stock_iterate(stock, stock_interact(predstock, stock_with(predprey, stock_ss(predprey__num, vec = single) <- p), prefix = "pred")),
                 list(p = p)))
-        }))
+        }),
+        list(gadget3:::g3_step(~{
+            stock_with(predprey, REPORT(predprey__num))
+        })) )
+    return(actions)
+}
+param_tmpl <- function (...) {
+    actions <- param_model(...)
     m <- g3_to_tmb(actions)
     pt <- attr(m, 'parameter_template')
     pt[grepl('paramut', rownames(pt), fixed = TRUE),]
 }
 
+areas <- g3_areas(c('a', 'b', 'c'))
 stock_mimm <- g3_stock(c(species = 'st', sex = 'm', maturity = 'imm'), seq(10, 35, 5)) %>% g3s_age(1, 5)
 stock_mmat <- g3_stock(c(species = 'st', sex = 'm', maturity = 'mat'), seq(10, 35, 5)) %>% g3s_age(3, 7)
 stock_fimm <- g3_stock(c(species = 'st', sex = 'f', maturity = 'imm'), seq(10, 35, 5)) %>% g3s_age(1, 5)
@@ -87,16 +100,32 @@ ok(cmp_code(
 
 ok(cmp_code(
     call("{",  # }
+        g3_parameterized('byst', by_stock = TRUE, ifmissing = "def.byst"),
+        g3_parameterized('nby', by_stock = FALSE, ifmissing = "def.nby"),
+        g3_parameterized('parp', by_year = TRUE, ifmissing = g3_parameterized('peep')),
+    NULL), quote({
+        stock_prepend(stock, g3_param(
+            "byst",
+            ifmissing = stock_prepend(stock, g3_param("def.byst"), name_part = NULL)
+        ), name_part = NULL)
+        g3_param("nby", ifmissing = g3_param("def.nby"))
+        g3_param_table("parp", expand.grid(cur_year = seq(start_year, end_year)), select = list(cur_year), ifmissing = g3_param("peep"))
+    NULL})), "ifmissing can be character (and gets assigned a parameter)")
+
+ok(cmp_code(
+    call("{",  # }
         g3_parameterized('parp', by_stock = FALSE, value = 4, lower = 2, upper = 9),
         g3_parameterized('parp', by_stock = FALSE, optimise = FALSE),
         g3_parameterized('parp', by_stock = FALSE, random = TRUE),
-        g3_parameterized('parp', by_year = TRUE, ifmissing = g3_parameterized('peep')),
     NULL), quote({
         g3_param("parp", value = 4, lower = 2, upper = 9)
         g3_param("parp", optimise = FALSE)
         g3_param("parp", random = TRUE)
-        g3_param_table("parp", expand.grid(cur_year = seq(start_year, end_year)), ifmissing = g3_param("peep"))
     NULL})), "Extra parameters passed through")
+
+ok(cmp_code(
+    g3_parameterized(c('a', 'b', moo = 'c')),
+    quote( g3_param("a.b.c") )), "Multiple name parts concatentated, labels ignored")
 
 ok(cmp_code(
     pretend_stock_action(g3_parameterized('parp', by_stock = TRUE)),
@@ -112,10 +141,10 @@ ok(cmp_code(
         g3_parameterized('parp', by_stock = TRUE, by_year = TRUE, by_age = TRUE),
     NULL)), quote({
         g3_param_table("st_m_imm.parp", expand.grid(
-            cur_year = seq(start_year, end_year)))
+            cur_year = seq(start_year, end_year)), select = list(cur_year) )
         g3_param_table("st_m_imm.parp", expand.grid(
             cur_year = seq(start_year, end_year),
-            age = seq(st_m_imm__minage, st_m_imm__maxage)))
+            age = seq(st_m_imm__minage, st_m_imm__maxage)), select = list(cur_year, age))
     NULL})), "Adding by_year or by_age turns it into a table")
 
 ok(cmp_code(
@@ -125,12 +154,12 @@ ok(cmp_code(
         g3_parameterized('yrst', by_year = TRUE, by_step = TRUE),
     NULL)), quote({
     g3_param_table("yr", expand.grid(
-        cur_year = seq(start_year, end_year)))
+        cur_year = seq(start_year, end_year)), select = list(cur_year))
     g3_param_table("st", expand.grid(
-        cur_step = seq_along(step_lengths)))
+        cur_step = seq_along(step_lengths)), select = list(cur_step))
     g3_param_table("yrst", expand.grid(
         cur_year = seq(start_year, end_year),
-        cur_step = seq_along(step_lengths)))
+        cur_step = seq_along(step_lengths)), select = list(cur_year, cur_step))
     NULL})), "by_year & by_step can be combined")
 
 ok(cmp_code(
@@ -141,7 +170,7 @@ ok(cmp_code(
     NULL)), quote({
         g3_param("st.parp", lower = 3)
         g3_param("st_m.parp", lower = 3)
-        g3_param_table("m.parp", expand.grid(cur_year = seq(start_year, end_year)))
+        g3_param_table("m.parp", expand.grid(cur_year = seq(start_year, end_year)), select = list(cur_year))
     NULL})), "Can specify which name_part should be used in the name")
 
 ok(cmp_code(
@@ -149,11 +178,19 @@ ok(cmp_code(
         g3_parameterized('parp', by_stock = list(stock_mimm, stock_mmat)),
         g3_parameterized('parp', by_stock = list(stock_mimm, stock_fmat)),  # M vs F, so only species matches
         g3_parameterized('parp', by_stock = list(stock_fimm, stock_fmat), by_age = TRUE),
+        # Mismatched stock list lengths isn't a problem
+        g3_parameterized("mismatch", by_stock = list(
+            g3_fleet(c(type = "comm", gear = "x")),
+            g3_fleet(c(type = "comm", gear = "y", "foreign")) )),
+        # No common parts, so concatenate everything after sorting
+        g3_parameterized('nocommon', by_stock = list(g3_stock(c("zz", "b"), 1), g3_stock(c("c", "d"), 1))),
     NULL), quote({
         stock_prepend("st.m", g3_param("parp"))
         stock_prepend("st", g3_param("parp"))
         stock_prepend("st.f", g3_param_table("parp", expand.grid(
-            age = seq(min(st_f_imm__minage, st_f_mat__minage), max(st_f_imm__maxage, st_f_mat__maxage)))))
+            age = seq(min(st_f_imm__minage, st_f_mat__minage), max(st_f_imm__maxage, st_f_mat__maxage))), select = list(age)))
+        stock_prepend("comm", g3_param("mismatch"))
+        stock_prepend("c_d.zz_b", g3_param("nocommon"))
     NULL})), "Can give a list of stocks, in which case it works out name parts for you")
 
 ok(cmp_code(
@@ -164,7 +201,7 @@ ok(cmp_code(
     NULL), quote({
         stock_prepend(stock, g3_param("rec"), name_part = "species") * stock_prepend(stock, g3_param("rec.scalar"), name_part = "species")
         stock_prepend(stock, g3_param("rec"), name_part = "species") * stock_prepend(stock, g3_param("rec.scalar"), name_part = "species") + stock_prepend(stock, g3_param("rec.offset"), name_part = "species")
-        stock_prepend(stock, g3_param_table("rec", expand.grid(age = seq(stock__minage, stock__maxage))), name_part = "species") * stock_prepend(stock, g3_param("rec.scalar"), name_part = "species")
+        stock_prepend(stock, g3_param_table("rec", expand.grid(age = seq(stock__minage, stock__maxage)), select = list(age)), name_part = "species") * stock_prepend(stock, g3_param("rec.scalar"), name_part = "species")
     NULL})), "scale / offset can be character, in which case they are also a param. Only by_stock is honoured though")
 
 year_range <- 1982:1986
@@ -187,3 +224,44 @@ ok(ut_cmp_identical(param_tmpl(
     "had_m_imm.is_comm.paramut.stockfleet",
     "had_m_imm.is.paramut.stockfleetcty",
     NULL)), "by_predator: Can combine with by_stock")
+
+ok_group("by_area") ##########
+ok(ut_cmp_identical(param_tmpl(
+    g3_parameterized('paramut', by_stock = TRUE, by_area = TRUE, by_year = TRUE),
+    NULL)$switch, c(
+        "had_m_imm.paramut.1990.a", "had_m_imm.paramut.1991.a", "had_m_imm.paramut.1992.a",
+        "had_m_imm.paramut.1993.a", "had_m_imm.paramut.1994.a",
+        "had_m_imm.paramut.1990.c", "had_m_imm.paramut.1991.c", "had_m_imm.paramut.1992.c",
+        "had_m_imm.paramut.1993.c", "had_m_imm.paramut.1994.c" )), "by_area: Generate parameters with area name")
+
+actions <- param_model(g3_parameterized('paramut', by_stock = TRUE, by_area = TRUE, by_year = TRUE))
+model_fn <- g3_to_r(actions)
+params <- attr(model_fn, 'parameter_template')
+params[grepl('param', names(params))] <- 100 + seq_along(grep('param', names(params)))
+ok(ut_cmp_equal(attr(model_fn(params), "had_m_imm_is_comm__num")[,age='age1',,pred_age='age1',], array(
+    c(params[["had_m_imm.paramut.1994.a"]], NA, NA, NA, NA, params[["had_m_imm.paramut.1994.c"]]),
+    dim = c(area = 2L, pred_area = 3L),
+    dimnames = list(area = c("a", "c"), pred_area = c("a", "b", "c")) )), "Model used areas by area name")
+
+ok(ut_cmp_identical(param_tmpl(
+    g3_parameterized('paramut.fleet', by_predator = TRUE, by_area = TRUE),
+    NULL)$switch, c(
+        "is_comm.paramut.fleet.a",
+        "is_comm.paramut.fleet.b",
+        "is_comm.paramut.fleet.c",
+        NULL )), "by_predator/by_area: Used predator areas instead of stock")
+
+########## by_area
+
+ok_group("prepend_extra") ##########
+ok(ut_cmp_identical(param_tmpl(
+    g3_parameterized("paramut", value = 1, prepend_extra = quote(predstock)),
+    g3_parameterized("paramut", value = 1, prepend_extra = "lindsey"),
+    g3_parameterized("paramut", value = 2, prepend_extra = list("frank", "fronk")),
+    NULL)$switch, c(
+        "is_comm.paramut",
+        "lindsey.paramut",
+        "fronk.frank.paramut",
+        NULL )), "prepend_extra: Used code / string / list of strings")
+
+########## prepend_extra

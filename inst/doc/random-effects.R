@@ -5,6 +5,7 @@ options(unittest.output = stderr())
 
 library(gadget3)
 set.seed(123)
+if (nzchar(Sys.getenv('G3_TEST_TMB'))) options(gadget3.tmb.work_dir = gadget3:::vignette_base_dir('work_dir'))
 
 ## ----warning = FALSE, message = FALSE-----------------------------------------
 ### Spawning & Random effects
@@ -241,10 +242,15 @@ attr(model_code, "parameter_template") |>
 #  
 #  #obj.fn$env$tracepar <- TRUE
 #  #obj.fn$env$tracemgc <- TRUE
-#  out <- optim(par = obj.fn$par, fn = obj.fn$fn, gr = obj.fn$gr, method = 'BFGS', control = list(
-#      maxit = 1000,
-#      trace = 1,
-#      reltol = .Machine$double.eps^2 ))
-#  params.out <- g3_tmb_relist(params.in, out$par)
-#  fit <- gadgetutils::g3_fit(model_code, params.out)
+#  # TODO:
+#  #out <- optim(par = obj.fn$par, fn = obj.fn$fn, gr = obj.fn$gr, method = 'BFGS', control = list(
+#  #    maxit = 1000,
+#  #    trace = 1,
+#  #    reltol = .Machine$double.eps^2 ))
+#  #params.out <- g3_tmb_relist(params.in, out$par)
+#  #fit <- gadgetutils::g3_fit(model_code, params.out)
+
+## ----echo=FALSE, eval=nzchar(Sys.getenv('G3_TEST_TMB'))-----------------------
+#  # TODO:
+#  # gadget3:::vignette_test_output("random-effects", model_code, params.out)
 

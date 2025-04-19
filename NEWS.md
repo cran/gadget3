@@ -1,7 +1,34 @@
+# gadget3 0.13-0:
+
+## Bug fixes
+* All-zero lengthgroups in initialconditions / > 1 maturity ratios no longer result in NaN #187 #182
+
+## New features
+* The `stock` column in likelihood data can now contain name parts as well as full stock names
+* `g3_to_r`-produced model functions will accept both a list & data.frame parameter template
+* `g3_to_r` models can include arbitary R functions, see vignettes/writing_actions #194
+* Add `g3_array_agg`, `g3_array_combine` #193 #213
+* Add surplus production model action `g3a_spmodel` #209
+* Projection / MSE support #210 #220
+  * Add g3_param_project() for time-varying parameters that also support projection
+  * AR1/logAR1 distribution functions
+  * Add g3_quota() for quota-definitions during projection based on a custom fishing year
+* Add `g3_array_plot`
+
+## Breaking changes
+* run_projection is now TRUE by default for renewal. A rec.proj parameter covers projection.
+* Rename ``detail_x__num`` to ``dstart_x__num`` #200
+
 # gadget3 0.12-0:
 
 ## Bug fixes
 * ``g3a_spawn()`` splits offspring into multiple stocks correctly
+
+## New features
+* Split likelihood distribution by predator_length / predator_age / predator_tag #154
+* Predation support, see ``?g3a_predate`` / ``?g3a_predate_catchability_predator`` #29
+* ``g3a_otherfood``, ``g3a_otherfood_normalparam``, ``g3a_otherfood_normalcv`` #155
+* Support length transform_fs in ``g3l_catchdistribution`` #95
 
 # gadget3 0.11-0:
 

@@ -2,6 +2,7 @@
 library(unittest)
 # Redirect ok() output to stderr
 options(unittest.output = stderr())
+if (nzchar(Sys.getenv('G3_TEST_TMB'))) options(gadget3.tmb.work_dir = gadget3:::vignette_base_dir('work_dir'))
 
 library(gadget3)
 set.seed(123)
@@ -149,11 +150,13 @@ actions_likelihood_f_surv <- list(
 actions <- c(actions, actions_f_surv, actions_likelihood_f_surv)
 
 ## -----------------------------------------------------------------------------
+suppressWarnings({  # NB: The model is incomplete, fish_imm__num isn't defined
 simple_model <- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
     f_surv,
     stocks,
     suitabilities = g3_suitability_exponentiall50(by_stock = TRUE),
     catchability_f = g3a_predate_catchability_totalfleet(1) )))
+})
 names(attr(simple_model, "parameter_template"))
 
 ## ----message=FALSE, echo=FALSE------------------------------------------------
@@ -166,12 +169,14 @@ ok(ut_cmp_identical(sort(names(attr(simple_model, "parameter_template")), method
     NULL)), "Params for simple_model, by_stock = TRUE")
 
 ## -----------------------------------------------------------------------------
+suppressWarnings({  # NB: The model is incomplete, fish_imm__num isn't defined
 simple_model <- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
     f_surv,
     stocks,
     suitabilities = g3_suitability_exponentiall50(by_stock = 'species'),
     catchability_f = g3a_predate_catchability_totalfleet(1) )))
 names(attr(simple_model, "parameter_template"))
+})
 
 ## ----message=FALSE, echo=FALSE------------------------------------------------
 ok(ut_cmp_identical(sort(names(attr(simple_model, "parameter_template")), method = "radix"), c(
@@ -181,6 +186,7 @@ ok(ut_cmp_identical(sort(names(attr(simple_model, "parameter_template")), method
     NULL)), "Params for simple_model, by_stock = 'species'")
 
 ## -----------------------------------------------------------------------------
+suppressWarnings({  # NB: The model is incomplete, fish_imm__num isn't defined
 simple_model <- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
     f_surv,
     stocks,
@@ -188,6 +194,7 @@ simple_model <- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
         l50 = g3_parameterized("l50", by_stock = 'species', by_predator = TRUE, by_year = TRUE)),
     catchability_f = g3a_predate_catchability_totalfleet(1) )))
 names(attr(simple_model, "parameter_template"))
+})
 
 ## ----message=FALSE, echo=FALSE------------------------------------------------
 ok(ut_cmp_identical(sort(names(attr(simple_model, "parameter_template")), method = "radix"), c(
@@ -277,4 +284,7 @@ attr(model_code, "parameter_template") |>
 
 ## ----eval=FALSE---------------------------------------------------------------
 #  utils::browseURL("figs/model_output_figures.html")
+
+## ----echo=FALSE, eval=nzchar(Sys.getenv('G3_TEST_TMB'))-----------------------
+#  gadget3:::vignette_test_output("multiple-substocks", model_code, params.out)
 

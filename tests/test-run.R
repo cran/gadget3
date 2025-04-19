@@ -45,3 +45,38 @@ ok_group("action_reports", {
         r_rep(q_r)
     })), "Can generate multiple report functions with filters")
 })
+
+
+ok_group("g3_collate") ##########
+
+out <- g3_to_r(list(
+    ~"fu1",
+    quote("fu2"),
+    list("004" = ~"fa", "005" = ~"fb"),
+    list("005" = ~"fc", NULL),
+    NULL ))
+ok(gadget3:::ut_cmp_code(out, quote({
+        "fa"
+        "fc"
+        "fu1"
+        "fu2"
+}), model_body = TRUE), "g3_to_r: unnamed at end, later beat former, NULLs removed, code included")
+
+st_imm <- g3_stock(c("st", "imm"), 1:10)
+out <- g3_to_r(list(
+    g3a_naturalmortality(
+        st_imm,
+        g3_formula(
+            parrot,
+            parrot = 0,
+            "-01:ut:parrot" = g3_formula(parrot <- runif(1)),
+            "999:ut:parrot" = g3_formula(parrot <- parrot + 1) )),
+    NULL ))
+ok(gadget3:::ut_cmp_code(out, quote({
+    parrot <- runif(1)
+    comment("Natural mortality for st_imm")
+    st_imm__num[] <- st_imm__num[] * parrot
+    parrot <- parrot + 1
+}), optimize = TRUE, model_body = TRUE), "Ancillary steps passed through action, in model in appropriate order")
+
+########## g3_collate

@@ -5,6 +5,26 @@ library(gadget3)
 
 cmp_code <- function (a, b) ut_cmp_identical(deparse(a), deparse(b))
 
+ok_group("g3_step:call", local({ # g3_step should work with a call, at least recursively.
+    f <- gadget3:::g3_step(quote( stock_iterate(st, stock_ss(st__num, vec = single)) ), recursing = TRUE, orig_env = as.environment(list(
+        st = g3_stock("stst", 1:5),
+        end = NULL )))
+    ok(gadget3:::ut_cmp_code(f, quote(
+        for (stst__length_idx in seq_along(stst__midlen)) g3_with(
+            length := stst__midlen[[stst__length_idx]],
+            stst__num[stst__length_idx])
+    )), "Triggered stock_iterate from quote()d code")
+    ok(ut_cmp_equal(
+        environment(f)$stst__midlen,
+        gadget3:::as_force_vector(c(
+            "1:2" = 1.5,
+            "2:3" = 2.5,
+            "3:4" = 3.5,
+            "4:5" = 4.5,
+            "5:Inf" = 5.5,
+            NULL )) ), "stst__midlen: Added to newly-created environment")
+}))
+
 ok_group("step_id", {
     step_id <- gadget3:::step_id
     stock_a <- g3_stock('stock_aaa', seq(10, 35, 5))
@@ -54,6 +74,7 @@ ok_group("g3_step:stock_reshape", {
 
     nll <- 0.0
     actions <- list(
+        g3a_time(1999, 1999),
         g3a_initialconditions(source, ~g3_param_vector("source_num"), ~g3_param_vector("source_wgt")),
 
         list('900:dest_even' = gadget3:::g3_step(~stock_iterate(dest_even, stock_intersect(source, {
@@ -88,17 +109,15 @@ ok_group("g3_step:stock_reshape", {
         })))),
 
         list('999' = ~{
-            nll <- nll + g3_param('x')
-            return(nll)
+            nll <- nll + g3_param('x', value = 1.0)
         }))
 
     # Compile model
-    params <- list(
-        source_num = c(11, 22, 33, 44),
-        source_wgt = c(11, 22, 33, 44),
-        x = 1.0)
     model_fn <- g3_to_r(actions)
     # model_fn <- edit(model_fn)
+    params <- attr(model_fn, 'parameter_template')
+    params[["source_num"]] <- c(11, 22, 33, 44)
+    params[["source_wgt"]] <- c(11, 22, 33, 44)
     result <- model_fn(params)
 
     if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
@@ -157,6 +176,10 @@ ok_group("g3_step:stock_ss", {
      ok(cmp_code(
          gadget3:::g3_step(~stock_ss(stock__num, area = , age = j)),
          ~stock__num[, j, ]), "Missing values are honoured too")
+
+     ok(cmp_code(
+         gadget3:::g3_step(~stock_ss(stock__num, camels = 42)),
+         ~stock__num[, stock__age_idx, stock__area_idx]), "Overrides for non-existant dimensions are ignored")
 
      ok(cmp_code(
          gadget3:::g3_step(~stock_ss(stock__num, length = 0L)),
@@ -290,14 +313,36 @@ ok_group("g3_step:dependent_formulas", (function () {
         stock = stock_imm))
     ok(cmp_code(f, g3_formula(quote(
         g3_with(
-            by_age := g3_param_table("ling_imm.byage", expand.grid(age = seq(ling_imm__minage, ling_imm__maxage))),
             const := g3_param("ling_imm.const"),
             for (age in seq(ling_imm__minage, ling_imm__maxage, by = 1)) g3_with(
                 ling_imm__age_idx := g3_idx(age - ling_imm__minage + 1L),
+                by_age := g3_param_table("ling_imm.byage", expand.grid(age = seq(ling_imm__minage, ling_imm__maxage)), select = list(age)),
                 (ling_imm__num[, ling_imm__age_idx] + const + by_age)))
     ))), "add_dependent_formula: stock substituted both inside and outside loop")
 
 })())
+
+ok_group("g3_step:dependent_formulas:init_val", local({
+    stock_imm <- g3_stock('ling_imm', 1)
+    stock_imm__num <- g3_stock_instance(stock_imm, 0)
+
+    fn <- g3_to_r(list(gadget3:::g3_step(g3_formula(quote(
+            return(stock_with(stock_imm, glob + stock_imm__num))
+        ),
+        glob = g3_global_formula(
+            g3_formula(1 + 1),
+            init_val = quote( stock_with(stock_imm, stock_imm__num) )),
+        stock_imm = stock_imm,
+        stock_imm__num = stock_imm__num ))))
+    ok(gadget3:::ut_cmp_code(body(fn), {
+        ling_imm__num <- array(0, dim = c(length = 1L), dimnames = list(length = "1:Inf"))
+        glob <- ling_imm__num
+        while (TRUE) {
+            glob <- 1 + 1
+            return((glob + ling_imm__num))
+        }
+    }, optimize = TRUE), "g3_global_formula: Both dependent formula and it's initval got g3_step()ed")
+}))
 
 ok_group("g3_step:stock_prepend", {
     stock_a <- g3_stock(c(t = 'stock', q = 'stick', 'aaa'), seq(10, 35, 5))
@@ -338,6 +383,15 @@ ok_group("g3_step:stock_prepend", {
             g3_param("bling.Linf", value = 1)
             g3_param("blang.Linf", value = 1)
         }), "stock_var can also be a string (worked out by g3_parameterized), which just gets prepended")
+
+    ok(cmp_code(
+        gadget3:::g3_step(g3_formula({
+            stock_prepend(blong, g3_param("Linf", value = 1))
+            stock_prepend(blong, stock_prepend("bling", g3_param("Linf", value = 1)))
+        }, blong = "hello")), ~{
+            g3_param("hello.Linf", value = 1)
+            g3_param("hello.bling.Linf", value = 1)
+        }), "stock_var can refer to a string (useful for param_project), which just gets prepended")
 })
 
 ok_group("g3_step:stock_prepend:table", {
@@ -404,6 +458,10 @@ ok_group("list_to_stock_switch", {
         gadget3:::g3_step(f)
     }
 
+    ok(gadget3:::ut_cmp_code(
+        gadget3:::list_to_stock_switch(34),
+        quote( 34 ) ), "Non-code items aren't wrapped with stock_with()")
+
     ok(ut_cmp_error(
         gadget3:::list_to_stock_switch(list(1,2)),
         "one default"), "Only one default option allowed")
@@ -462,3 +520,67 @@ ok_group("g3_step:stock_iterate", {
                             stock[halibut__length_idx, halibut__age_idx, halibut__area_idx])))
     )), "Can turn length back on & iterate over all dimensions")
 })
+
+ok_group("g3_step:stock_isdefined", {
+    ok(gadget3:::ut_cmp_code(gadget3:::g3_step(~{
+        if (stock_isdefined(gerald)) print("woo")
+    }), quote({
+    }), optimize = FALSE), "stock_isdefined alone")
+
+    ok(gadget3:::ut_cmp_code(gadget3:::g3_step(~{
+        for(gerald in 1:10) if (stock_isdefined(gerald)) print("woo")
+    }), quote(
+        for(gerald in 1:10) print("woo")
+    ), optimize = FALSE), "stock_isdefined nested in for")
+
+    ok(gadget3:::ut_cmp_code(gadget3:::g3_step(~{
+        g3_with(gerald := 1, archibald := 2, garibaldi := 3, if (stock_isdefined(gerald)) print("woo") else print("aw"))
+        g3_with(archibald := 2, garibaldi := 3, if (stock_isdefined(gerald)) print("woo") else print("aw"))
+    }), quote({
+        g3_with(gerald := 1, archibald := 2, garibaldi := 3, print("woo"))
+        g3_with(archibald := 2, garibaldi := 3, print("aw"))
+    }), optimize = FALSE), "stock_isdefined nested in g3_with, defines don't leak")
+})
+
+ok_group("g3_step:resolve_stock_list", local({
+    st_a  <- g3_stock(c("st", "a"), 0)
+    st_b  <- g3_stock(c("st", "b"), 0)
+    st_c  <- g3_stock(c("st", "c"), 0)
+
+    ok(ut_cmp_error({
+        stock_list <- list(
+            st_a = g3_formula(quote( a + 1 ), a = 99),
+            st_b = g3_formula(quote( a + 1 ), a = 88) )
+        gadget3:::resolve_stock_list(stock_list, st_c)
+    }, "st_c"), "Missing option and no default an error")
+
+    ok(ut_cmp_error({
+        stock_list <- list(
+            st_a = g3_formula(quote( a + 1 ), a = 99),
+            st_b = g3_formula(quote( a + 1 ), a = 88),
+            1,
+            2 )
+        gadget3:::resolve_stock_list(stock_list, st_c)
+    }, "Only one default", ignore.case = TRUE), "Multiple defaults an error")
+
+    stock_list <- list(
+        st_a = g3_formula(quote( a + 1 ), a = 99),
+        st_b = g3_formula(quote( a + 1 ), a = 88),
+        g3_formula(quote( a + 1 ), a = 77) )
+    ok(gadget3:::ut_cmp_code(
+        gadget3:::resolve_stock_list(stock_list, st_a),
+        g3_formula(quote( a + 1 ), a = 99) ), "stock_list / st_a")
+    ok(gadget3:::ut_cmp_code(
+        gadget3:::resolve_stock_list(stock_list, st_b),
+        g3_formula(quote( a + 1 ), a = 88) ), "stock_list / st_b")
+    ok(gadget3:::ut_cmp_code(
+        gadget3:::resolve_stock_list(stock_list, st_c),
+        g3_formula(quote( a + 1 ), a = 77) ), "stock_list / st_c (the default)")
+
+    ok(gadget3:::ut_cmp_code(
+        gadget3:::resolve_stock_list(g3_formula(1 + 1), st_b),
+        g3_formula(1 + 1) ), "Single item / st_b (return regardless)")
+    ok(gadget3:::ut_cmp_code(
+        gadget3:::resolve_stock_list(g3_formula(1 + 1), st_c),
+        g3_formula(1 + 1) ), "Single item / st_c (return regardless)")
+}))

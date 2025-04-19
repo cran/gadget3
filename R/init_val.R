@@ -3,8 +3,8 @@ g3_init_val <- function (
         name_spec,
         value = NULL,
         spread = NULL,
-        lower = if (!is.null(spread)) value * (1 - spread),
-        upper = if (!is.null(spread)) value * (1 + spread),
+        lower = if (!is.null(spread)) min(value * (1-spread), value * (1+spread)),
+        upper = if (!is.null(spread)) max(value * (1-spread), value * (1+spread)),
         optimise = !is.null(lower) & !is.null(upper),
         parscale = if (is.null(lower) || is.null(upper)) NULL else 'auto',
         random = NULL,
@@ -13,8 +13,8 @@ g3_init_val <- function (
     stopifnot(is.character(name_spec) && length(name_spec) == 1)
     stopifnot(is.numeric(value) || is.null(value))
     stopifnot(is.numeric(spread) || is.null(spread))
-    stopifnot(is.numeric(lower) || is.null(lower))
-    stopifnot(is.numeric(upper) || is.null(upper))
+    stopifnot(is.numeric(lower) || is.na(lower) || is.null(lower))
+    stopifnot(is.numeric(upper) || is.na(upper) || is.null(upper))
     stopifnot(is.logical(optimise) || is.null(optimise))
     stopifnot(identical(parscale, 'auto') || is.numeric(parscale) || is.null(parscale))
     stopifnot(is.logical(random) || is.null(random))
@@ -90,6 +90,15 @@ g3_init_val <- function (
         } else if (!is.null(parscale)) {
             param_template[matches, 'parscale'] <- parscale
             if (any(auto_exp)) param_template[auto_exp, 'parscale'] <- log(param_template[auto_exp, 'parscale'])
+        }
+
+        m <- is.finite(unlist(param_template[matches, 'value'])) & is.finite(param_template[matches, 'lower']) &
+            unlist(param_template[matches, 'value']) < param_template[matches, 'lower']
+        if (any(m)) warning("Initial parameter values below lower bound: ", paste(param_template[matches, 'switch'][m], collapse = ", "))
+        m <- is.finite(unlist(param_template[matches, 'value'])) & is.finite(param_template[matches, 'upper']) &
+            param_template[matches, 'upper'] < unlist(param_template[matches, 'value'])
+        if (any(m)) {
+            warning("Initial parameter values above upper bound: ", paste(param_template[matches, 'switch'][m], collapse = ", "))
         }
     } else {  # is.list
         if (!is.null(value)) {

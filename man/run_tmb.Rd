@@ -16,12 +16,17 @@
 \usage{
 g3_to_tmb(actions, trace = FALSE, strict = FALSE)
 
-g3_tmb_adfun(cpp_code, parameters = attr(cpp_code, "parameter_template"),
-    compile_flags =
-        if (.Platform$OS.type == "windows") c("-O1", "-march=native")
-        else c("-O3", "-flto", "-march=native"),
-    work_dir = tempdir(),
-    output_script = FALSE, ...)
+g3_tmb_adfun(
+        cpp_code,
+        parameters = attr(cpp_code, 'parameter_template'),
+        compile_flags = getOption('gadget3.tmb.compile_flags', default =
+            if (.Platform$OS.type == "windows") c("-O1", "-march=native")
+            else c("-O3", "-flto=auto", "-march=native") ),
+        work_dir = getOption('gadget3.tmb.work_dir', default = tempdir()),
+        output_script = FALSE,
+        compile_args = list(
+            framework = getOption("gadget3.tmb.framework", default = "TMBad") ),
+        ...)
 
 g3_tmb_par(parameters, include_random = TRUE)
 
@@ -68,9 +73,15 @@ g3_tmb_relist(parameters, par)
   }
   \item{compile_flags}{
     List of extra flags to compile with, use e.g. "-g" to enable debugging output.
+    Can be set with an option, e.g. \code{options(gadget3.tmb.compile_flags = c('-O0', '-g'))}
+  }
+  \item{compile_args}{
+    Any other arguments to pass to \link[TMB:compile]{TMB::compile}
   }
   \item{work_dir}{
     Directory to write and compile .cpp files in. Defaults to R's current temporary directory
+    Set this to preserve compiled output and re-use between R sessions if possible.
+    Can be set with an option, e.g. \code{options(gadget3.tmb.work_dir = fs::path_abs('tmb-workdir'))}
   }
   \item{output_script}{
     If \code{TRUE}, create a temporary R script that runs \link[TMB:MakeADFun]{MakeADFun}, and return the location.
@@ -147,29 +158,23 @@ if (interactive()) {
 }
 
 # Set initial conditions for parameters
-tmb_param <- attr(cpp, 'parameter_template')
-tmb_param$value$project_years <- 0
-tmb_param$value$ling.init.F <- 0.4
-tmb_param$value$ling.Linf <- 160
-tmb_param$value$ling.K <- 90
-tmb_param$value$ling.t0 <- 0
-tmb_param[grepl('^ling.init.sd.', rownames(tmb_param)), 'value'] <- 50.527220
-tmb_param[grepl('^ling_imm.init.\\\\d+', rownames(tmb_param)), 'value'] <- 1
-tmb_param$value$ling_imm.init.scalar <- 200
-tmb_param$value$ling_imm.walpha <- 2.27567436711055e-06
-tmb_param$value$ling_imm.wbeta <- 3.20200445996187
-tmb_param[grepl('\\\\.M$', rownames(tmb_param)), 'value'] <- 0.15
+attr(cpp, 'parameter_template') |>
+    g3_init_val("project_years", 0) |>
+    g3_init_val("ling.init.F", 0.4) |>
+    g3_init_val("ling.Linf", 160) |>
+    g3_init_val("ling.K", 90) |>
+    g3_init_val("ling.t0", 0) |>
+    g3_init_val("ling.init.sd.#", 50.527220) |>
+    g3_init_val("ling_imm.init.#", 1, lower = 0, upper = 1000) |>
+    g3_init_val("ling_imm.init.scalar", 200) |>
+    g3_init_val("ling_imm.walpha", 2.275e-06) |>
+    g3_init_val("ling_imm.wbeta", 3.2020) |>
+    g3_init_val("ling_*.M.#", 0.15) |>
+    identity() -> tmb_param
 
-# We can set lower/upper bounds for multiple properties at once with grepl()
-tmb_param[grepl('.', rownames(tmb_param)), 'lower'] <- -1000
-tmb_param[grepl('.', rownames(tmb_param)), 'upper'] <- 1000
+\donttest{\dontshow{comment("NB: Making / optimising a TMB function is slow")}
 
-# parscale gives optim() a relative scale of parameters
-tmb_param['parscale'] <- 1
-
-\donttest{\dontshow{# NB: Making / optimising a TMB function is slow}
-
-\dontshow{# NB: Github windows CI can't compile a model}
+\dontshow{comment("NB: Github windows CI can't compile a model")}
 if (!( nzchar(Sys.getenv('GITHUB_CI')) && .Platform$OS.type == "windows" )) {
   # Compile to a TMB ADFun
   tmb <- g3_tmb_adfun(cpp, tmb_param)
@@ -227,7 +232,12 @@ if (!( nzchar(Sys.getenv('GITHUB_CI')) && .Platform$OS.type == "windows" )) {
   # Rebuild, only including "Fun" (i.e. without auto-differentiation)
   # Result will only work for tmb$report
   tmb <- g3_tmb_adfun(cpp, tmb_param, type = "Fun")
-  result <- tmb$report(g3_tmb_par(tmb_param))
+  result <- tmb$report(g3_tmb_par(tmb_param, include_random = TRUE))
+
+  # We can also use tmb$simulate
+  result <- tmb$simulate(g3_tmb_par(tmb_param, include_random = TRUE))
+
+  # NB: Before running simulations, you should use set.seed() to ensure random output
 }
 }
 

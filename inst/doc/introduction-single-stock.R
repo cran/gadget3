@@ -2,6 +2,7 @@
 library(unittest)
 # Redirect ok() output to stderr
 options(unittest.output = stderr())
+if (nzchar(Sys.getenv('G3_TEST_TMB'))) options(gadget3.tmb.work_dir = gadget3:::vignette_base_dir('work_dir'))
 
 library(gadget3)
 set.seed(123)
@@ -30,7 +31,7 @@ actions <- list()
 
 actions_time <- list(
   g3a_time(
-    1979L, 2023L,
+    1990L, 2023L,
     step_lengths = c(3L, 3L, 3L, 3L)),
   NULL)
 
@@ -60,7 +61,7 @@ actions_fish <- list(
     maxlengthgroupgrowth = 4L)),
   g3a_naturalmortality(fish),
   g3a_initialconditions_normalcv(fish),
-  g3a_renewal_normalparam(fish,
+  g3a_renewal_normalcv(fish,
     run_step = 2),
   g3a_age(fish),
   NULL)
@@ -123,20 +124,21 @@ params$fish.lencv <- 0.1
 params$report_detail <- 1
 
 # Run model and pull out final abundance from the result
-abund <- attr(simple_fn(params), "detail_fish__num")[,area = 'IXa', , time = '1990-01']
-
-par(mfrow=c(3, 2), mar = c(2,2,1,0))
-for (a in dimnames(abund)$age) barplot(abund[, age = a], main = a)
+g3_array_plot(g3_array_agg(
+    attr(simple_fn(params), "dstart_fish__num"),
+    c('age', 'length'),
+    time = "1990-01"))
 
 ## -----------------------------------------------------------------------------
 params$fish.K <- 0.9
-abund <- attr(simple_fn(params), "detail_fish__num")[,area = 'IXa', , time = '1990-01']
-par(mfrow=c(3, 2), mar = c(2,2,1,0))
-for (a in dimnames(abund)$age) barplot(abund[, age = a], main = a)
+g3_array_plot(g3_array_agg(
+    attr(simple_fn(params), "dstart_fish__num"),
+    c('age', 'length'),
+    time = "1990-01"))
 
 ## ----message=FALSE, echo=FALSE------------------------------------------------
 # Make reporting is working
-abund <- attr(simple_fn(params), "detail_fish__num")[,area = 'IXa', , time = '1990-01']
+abund <- g3_array_agg(attr(simple_fn(params), "dstart_fish__num"), c('age', 'length'), time = "1990-01")
 ok(ut_cmp_identical(dimnames(abund), list(
     length = c("10:20", "20:30", "30:40", "40:50", "50:60", "60:70", "70:80", "80:90", "90:100", "100:Inf"),
     age = c("age1", "age2", "age3", "age4", "age5"))), "abund dimnames() structure")
@@ -145,7 +147,7 @@ ok(ut_cmp_identical(dimnames(abund), list(
 # Fleet data for f_surv #################################
 
 # Landings data: For each year/step/area
-expand.grid(year = 1990:1994, step = 2, area = 'IXa') |>
+expand.grid(year = 1990:2023, step = 2, area = 'IXa') |>
     # Generate a random total landings by weight
     mutate(weight = rnorm(n(), mean = 1000, sd = 100)) |>
     # Assign result to landings_f_surv
@@ -157,7 +159,7 @@ plot(landings_f_surv[c('year', 'weight')], ylim = c(0, 2000), col = "red")
 
 ## -----------------------------------------------------------------------------
 # Length distribution data: Randomly generate 100 samples in each year/step/area
-expand.grid(year = 1990:1994, step = 2, area = 'IXa', length = rep(NA, 100)) |>
+expand.grid(year = 1990:2023, step = 2, area = 'IXa', length = rep(NA, 100)) |>
   # Generate random lengths for these samples
   mutate(length = rnorm(n(), mean = 50, sd = 20)) |>
   # Save unagggregated data into ldist_f_surv.raw
@@ -183,19 +185,19 @@ cut(c(50), breaks = c(seq(0, 80, 20), Inf), right = FALSE)
 
 ## -----------------------------------------------------------------------------
 summary(ldist_f_surv)
-years <- unique(ldist_f_surv$year)
+years <- 1990:1994
 par(mfrow=c(2, ceiling(length(years) / 2)))
 for (y in years) plot(as.data.frame(ldist_f_surv) |>
     filter(year == y & step == 2) |>
     select(length, number), main = y, ylim = c(0, 60))
 
 ## -----------------------------------------------------------------------------
-# Assume 5 * 5 samples in each year/step/area
-expand.grid(year = 1990:1994, step = 2, area = 'IXa', age = rep(NA, 5), length = rep(NA, 5)) |>
-  # Generate random lengths/ages for these samples
-  mutate(length = rnorm(n(), mean = 50, sd = 20)) |>
+# Assume 100 * 100 samples in each year/step/area
+expand.grid(year = 1990:2023, step = 2, area = 'IXa', age = rep(NA, 100), length = rep(NA, 100)) |>
   # Generate random whole numbers for age
   mutate(age = floor(runif(n(), min = 1, max = 5))) |>
+  # Generate random lengths for these samples
+  mutate(length = rnorm(n(), mean = 30 + age * 10, sd = 20)) |>
   # Group into length/age bins
   group_by(
       year = year,
@@ -208,7 +210,7 @@ expand.grid(year = 1990:1994, step = 2, area = 'IXa', age = rep(NA, 5), length =
 
 ## -----------------------------------------------------------------------------
 summary(aldist_f_surv)
-years <- unique(aldist_f_surv$year)
+years <- 1990:1994
 ages <- unique(aldist_f_surv$age)
 
 par(mfrow=c(length(years), length(ages)), mar = c(2,2,1,0))
@@ -258,7 +260,7 @@ actions <- c(actions, actions_likelihood_f_surv)
 # Create abundance index for si_cpue ########################
 
 # Generate random data
-expand.grid(year = 1990:1994, step = 3, area = 'IXa') |>
+expand.grid(year = 1990:2023, step = 3, area = 'IXa') |>
     # Fill in a weight column with total biomass for the year/step/area combination
     mutate(weight = runif(n(), min = 10000, max = 100000)) ->
     dist_si_cpue
@@ -313,26 +315,25 @@ estimate_linf <- max(g3_stock_def(fish, "midlen"))
 estimate_t0 <- g3_stock_def(fish, "minage") - 0.8
 
 attr(model_code, "parameter_template") |>
-  # fish.init.scalar & fish.rec.scalar: Overall scalar for recruitment/initial conditions, see g3a_renewal_normalparam()
-  g3_init_val("*.rec|init.scalar", 10, lower = 0.001, upper = 200) |>
-  # fish.rec.(age): Per-age recriutment scalar, see g3a_renewal_normalparam()
-  g3_init_val("*.init.#", 10, lower = 0.001, upper = 200) |>
-  # fish.rec.(year): Recruitment level year-on-year, see g3a_renewal_normalparam()
-  g3_init_val("*.rec.#", 100, lower = 1e-6, upper = 1000) |>
-  # fish.rec.sd: Standard deviation for recruitment, see g3a_renewal_normalparam()
-  g3_init_val("*.rec.sd", 5, lower = 4, upper = 20) |>
+  # fish.init.scalar & fish.rec.scalar: Overall scalar for recruitment/initial conditions, see g3a_renewal_normalcv()
+  g3_init_val("*.rec|init.scalar", 1, optimise = FALSE) |>
+  # fish.rec.(age): Per-age recriutment scalar, see g3a_renewal_normalcv()
+  g3_init_val("*.init.#", 10, lower = 0.001, upper = 30) |>
+  # fish.rec.(year): Recruitment level year-on-year, see g3a_renewal_normalcv()
+  g3_init_val("*.rec.#", 1e-4, lower = 1e-6, upper = 1e-2) |>
+  g3_init_val("*.rec.proj", 0.002) |>
   # init.F: Offset for initial M, see g3a_renewal_initabund()
   g3_init_val("init.F", 0.5, lower = 0.1, upper = 1) |>
 
   # fish.M.(age): per-age M for our species, see g3a_naturalmortality()
-  g3_init_val("*.M.#", 0.15, lower = 0.001, upper = 1) |>
+  g3_init_val("*.M.#", 0.15, lower = 0.001, upper = 10) |>
 
   # fish.Linf, fish.K, fish.t0: VonB parameters for our species, see g3a_renewal_vonb_t0(), g3a_grow_lengthvbsimple()
   g3_init_val("*.Linf", estimate_linf, spread = 0.2) |>
   g3_init_val("*.K", 0.3, lower = 0.04, upper = 1.2) |>
   g3_init_val("*.t0", estimate_t0, spread = 2) |>
 
-  # fish.walpha, fish.wbeta: Age/weight relationship for initialconditions, renewal, see g3a_renewal_normalparam()
+  # fish.walpha, fish.wbeta: Age/weight relationship for initialconditions, renewal, see g3a_renewal_normalcv()
   g3_init_val("*.walpha", 0.01, optimise = FALSE) |>
   g3_init_val("*.wbeta", 3, optimise = FALSE) |>
 
@@ -341,7 +342,7 @@ attr(model_code, "parameter_template") |>
   g3_init_val("*.*.l50", estimate_l50, spread = 0.25) |>
 
   # fish.bbin: Beta for beta-binomial distribution for fish growth, see g3a_grow_impl_bbinom()
-  g3_init_val("*.bbin", 100, lower = 1e-05, upper = 1000) |>
+  g3_init_val("*.bbin", 1, lower = 1e-05, upper = 10) |>
 
   # identity() is a do-nothing function, but it lets us finish on a new line
   identity() -> params.in
@@ -368,4 +369,7 @@ attr(model_code, "parameter_template") |>
 
 ## ----eval=FALSE---------------------------------------------------------------
 #  utils::browseURL("figs/model_output_figures.html")
+
+## ----echo=FALSE, eval=nzchar(Sys.getenv('G3_TEST_TMB'))-----------------------
+#  gadget3:::vignette_test_output("introduction-single-stock", model_code, params.out)
 

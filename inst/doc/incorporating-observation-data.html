@@ -105,6 +105,7 @@ column: Age-Length distribution data</a></li>
 <li><a href="#stock-column-maturity-stage-distribution"><em>stock</em>
 column: Maturity stage distribution</a></li>
 <li><a href="#fleet-column"><em>fleet</em> column</a></li>
+<li><a href="#predator-column"><em>predator</em> column</a></li>
 </ul></li>
 </ul>
 </div>
@@ -126,8 +127,9 @@ that will compare observation data to the model.</p>
 <p>To do this you either need <code>g3l_catchdistribution()</code> or
 <code>g3l_abundancedistribution()</code>. As the names suggest,
 <code>g3l_catchdistribution()</code> will compare catch data of stocks
-from the provided fleets, <code>g3l_abundancedistribution()</code> will
-compare total abundance of stocks. Otherwise they are identical.</p>
+from the provided fleets/predators,
+<code>g3l_abundancedistribution()</code> will compare total abundance of
+stocks. Otherwise they are identical.</p>
 <p>This comparison is a 2 stage process:</p>
 <ol style="list-style-type: decimal">
 <li>Aggregation: The columns in the observation data are inspected, and
@@ -461,28 +463,115 @@ year    stock    number
 ##   fish_mat 4305 2381 3913</code></pre>
 <p>The stock names have to match what gadget3 uses, or an error will be
 generated.</p>
+<p>You can also use partial stock names, for example:</p>
+<pre class="r"><code>stocks &lt;- list(
+   g3_stock(c(species = &#39;fish&#39;, &#39;imm&#39;, &#39;f&#39;), 1:10),
+   g3_stock(c(species = &#39;fish&#39;, &#39;imm&#39;, &#39;m&#39;), 1:10),
+   g3_stock(c(species = &#39;fish&#39;, &#39;mat&#39;, &#39;f&#39;), 1:10),
+   g3_stock(c(species = &#39;fish&#39;, &#39;mat&#39;, &#39;m&#39;), 1:10) )
+
+drop(g3_distribution_preview(read.table(header = TRUE, text=&quot;
+year    stock    number
+1999   imm   1000
+1999   mat   4305
+2000   imm   7034
+2000   mat   2381
+&quot;), stocks = stocks))</code></pre>
+<pre><code>##      time
+## stock 1999 2000
+##   imm 1000 7034
+##   mat 4305 2381
+## attr(,&quot;stock_map&quot;)
+## fish_imm_f fish_imm_m fish_mat_f fish_mat_m 
+##      &quot;imm&quot;      &quot;imm&quot;      &quot;mat&quot;      &quot;mat&quot;</code></pre>
+<p>The <code>imm</code> columns will compare to the sum of
+<code>fish_imm_f</code> &amp; <code>fish_mat_f</code>.</p>
+<p>The parts do not have to be in order, the following is also
+valid:</p>
+<pre class="r"><code>drop(g3_distribution_preview(read.table(header = TRUE, text=&quot;
+year    stock    number
+1999   fish_f   1000
+1999   fish_m   4305
+2000   fish_f   7034
+2000   fish_m   2381
+&quot;), stocks = stocks))</code></pre>
+<pre><code>##         time
+## stock    1999 2000
+##   fish_f 1000 7034
+##   fish_m 4305 2381
+## attr(,&quot;stock_map&quot;)
+## fish_imm_f fish_imm_m fish_mat_f fish_mat_m 
+##   &quot;fish_f&quot;   &quot;fish_m&quot;   &quot;fish_f&quot;   &quot;fish_m&quot;</code></pre>
+<p><em>NB:</em> A stock can only appear in one grouping:</p>
+<pre class="r"><code># NB: Wrong!
+drop(g3_distribution_preview(read.table(header = TRUE, text=&quot;
+year    stock    number
+1999   f         1000
+1999   imm       4305
+2000   f         7034
+2000   imm       2381
+&quot;), stocks = stocks))</code></pre>
+<pre><code>##      time
+## stock 1999 2000
+##   f   1000 7034
+##   imm 4305 2381
+## attr(,&quot;stock_map&quot;)
+## fish_imm_f fish_imm_m fish_mat_f fish_mat_m 
+##        &quot;f&quot;      &quot;imm&quot;        &quot;f&quot;         NA</code></pre>
+<p><code>fish_imm_f</code> will only appear in the <code>f</code> rows,
+not <code>imm</code> rows. In this case, multiple likelhood components
+would be a better approach.</p>
 <p>As before, gaps in data are preserved, and <code>missing_val</code>
 is used to decide what to do with them.</p>
 </div>
 <div id="fleet-column" class="section level3">
 <h3><em>fleet</em> column</h3>
-<pre class="r"><code>f_comm &lt;- g3_fleet(&#39;comm&#39;)
-f_surv &lt;- g3_fleet(&#39;surv&#39;)
+<pre class="r"><code>fleets &lt;- list(
+    g3_fleet(c(&#39;comm&#39;, country = &#39;se&#39;)),
+    g3_fleet(c(&#39;comm&#39;, country = &#39;fi&#39;)),
+    g3_fleet(c(&#39;surv&#39;, country = &#39;se&#39;)) )
 
 g3_distribution_preview(read.table(header = TRUE, text=&quot;
 year    fleet    number
-1999   f_comm   1000
-1999   f_surv   4305
-2000   f_comm   7034
-2000   f_surv   2381
-2001   f_surv   3913
-&quot;), fleets = list(f_comm, f_surv))[length = &#39;0:Inf&#39;,,]</code></pre>
+1999   comm      1000
+1999   surv_se   4305
+2000   comm      7034
+2000   surv_se   2381
+2001   surv_se   3913
+&quot;), fleets = fleets)[length = &#39;0:Inf&#39;,,]</code></pre>
+<pre><code>##          time
+## fleet     1999 2000 2001
+##   comm    1000 7034   NA
+##   surv_se 4305 2381 3913</code></pre>
+<p>The name matching works in the same way as stocks above, and should
+be either the name gadget3 uses or parts of it.</p>
+<p>As before, gaps in data are preserved, and <code>missing_val</code>
+is used to decide what to do with them.</p>
+</div>
+<div id="predator-column" class="section level3">
+<h3><em>predator</em> column</h3>
+<pre class="r"><code>predators &lt;- list(
+    g3_stock(c(&#39;seal&#39;, &#39;imm&#39;, &#39;f&#39;), 10:20),
+    g3_stock(c(&#39;seal&#39;, &#39;mat&#39;, &#39;f&#39;), 10:20),
+    g3_stock(c(&#39;seal&#39;, &#39;imm&#39;, &#39;m&#39;), 10:20),
+    g3_stock(c(&#39;seal&#39;, &#39;mat&#39;, &#39;m&#39;), 10:20) )
+
+drop(g3_distribution_preview(read.table(header = TRUE, text=&quot;
+year    predator    number
+1999   seal_f   1000
+1999   seal_m   4305
+2000   seal_f   7034
+2000   seal_m   2381
+&quot;), predators = predators))</code></pre>
 <pre><code>##         time
-## fleet    1999 2000 2001
-##   f_comm 1000 7034   NA
-##   f_surv 4305 2381 3913</code></pre>
-<p>The stock names have to match what gadget3 uses, or an error will be
-generated.</p>
+## predator 1999 2000
+##   seal_f 1000 7034
+##   seal_m 4305 2381
+## attr(,&quot;predator_map&quot;)
+## seal_imm_f seal_mat_f seal_imm_m seal_mat_m 
+##   &quot;seal_f&quot;   &quot;seal_f&quot;   &quot;seal_m&quot;   &quot;seal_m&quot;</code></pre>
+<p>The name matching works in the same way as stocks above, and should
+be either the name gadget3 uses or parts of it.</p>
 <p>As before, gaps in data are preserved, and <code>missing_val</code>
 is used to decide what to do with them.</p>
 </div>
