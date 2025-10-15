@@ -13,16 +13,6 @@ cmp_array <- function (ar, table_text) {
     ut_cmp_identical(as.data.frame.table(ar, stringsAsFactors = FALSE), tbl)
 }
 
-capture_warnings <- function(x, full_object = FALSE) {
-    all_warnings <- list()
-    rv <- withCallingHandlers(x, warning = function (w) {
-        all_warnings <<- c(all_warnings, list(w))
-        invokeRestart("muffleWarning")
-    })
-    if (!full_object) all_warnings <- vapply(all_warnings, function (w) w$message, character(1))
-    return(list(rv = rv, warnings = all_warnings))
-}
-
 ok_group("action_reports")
 ok(ut_cmp_equal(
     gadget3:::action_reports(list(g3_formula(quote({
@@ -53,33 +43,25 @@ raw_report <- g3s_clone(prey_a, 'raw_report') %>%
 
 actions <- list(
     g3a_time(2000, 2002, step_lengths = c(6, 6), project_years = 0),
-    g3a_initialconditions(prey_a, ~10 * age + prey_a__midlen * 0, ~100 * age + prey_a__midlen * 0),
+    gadget3:::g3a_initialconditions_manual(prey_a, ~10 * age + prey_a__midlen * 0, ~100 * age + prey_a__midlen * 0),
     g3a_age(prey_a),
     "5:testreport_vec" = g3_formula({
         testreport_vec <- testreport_vec + cur_time
     }, testreport_vec = 1:4),
     g3a_report_stock(agg_report, prey_a, ~stock_ss(prey_a__num), include_adreport = TRUE),
     g3a_report_stock(raw_report, prey_a, ~stock_ss(input_stock__num)),  # NB: We can let g3_step rename it for us
-    list('999' = ~{ nll <- nll + g3_param('x', value = 1.0) }))
+    # NB: Only required for testing
+    gadget3:::g3l_test_dummy_likelihood() )
 actions <- c(actions, list(
     g3a_report_history(actions, '^prey_a__(num|wgt|midlen)|^testreport_') ))
             
 # Compile model
 model_fn <- g3_to_r(actions, trace = FALSE)
-# model_fn <- edit(model_fn)
-if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-    model_cpp <- g3_to_tmb(actions, trace = FALSE)
-    # model_cpp <- edit(model_cpp)
-    model_tmb <- g3_tmb_adfun(model_cpp, compile_flags = c("-O0", "-g"))
-} else {
-    writeLines("# skip: not compiling TMB model")
-}
+model_cpp <- g3_to_tmb(actions, trace = FALSE)
 
 ok_group("report", {
     params <- attr(model_fn, 'parameter_template')
-    result <- capture_warnings(model_fn(params))
-    ok(ut_cmp_identical(result$warnings, "No ADREPORT functionality available in R"), "Tried to ADREPORT, moved on")
-    result <- result$rv
+    result <- model_fn(params)
     r <- attributes(result)
     # str(result)
     # str(as.list(r), vec.len = 10000)
@@ -164,23 +146,18 @@ ok_group("report", {
                4       4       5       7      10      14
   '), "hist_testreport_vec: History of vector")
 
-    if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-        param_template <- attr(model_cpp, "parameter_template")
-        param_template$value <- params[param_template$switch]
-        capture_warnings(gadget3:::ut_tmb_r_compare(model_fn, model_tmb, param_template))
-    }
+    gadget3:::ut_tmb_r_compare2(model_fn, model_cpp, params)
 })
 
 ok_group("adreport", {
     params <- attr(model_fn, 'parameter_template')
-    result <- capture_warnings(model_fn(params))
-    ok(ut_cmp_identical(result$warnings, "No ADREPORT functionality available in R"), "Tried to ADREPORT, moved on")
-    result <- result$rv
+    result <- model_fn(params)
     r <- attributes(result)
     # str(result)
     # str(as.list(r), vec.len = 10000)
 
     if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
+        model_tmb <- g3_tmb_adfun(model_cpp, compile_flags = c("-O0", "-g"))
         sdrep <- TMB::sdreport(model_tmb)
         ok(ut_cmp_equal(
             summary(sdrep, 'report'),

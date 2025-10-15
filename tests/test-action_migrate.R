@@ -34,7 +34,7 @@ ok_group("g3a_migrate_normalize", {
 ok_group("g3a_migrate", {
     actions <- list(
         g3a_time(start_year = 2000, end_year = 2004, step_lengths = c(3,3,3,3), project_years = 0),
-        g3a_initialconditions(stock_acd,
+        gadget3:::g3a_initialconditions_manual(stock_acd,
             ~area * 100 + stock_acd__minlen,
             ~area * 10 + stock_acd__minlen),
         g3a_migrate(
@@ -50,28 +50,15 @@ ok_group("g3a_migrate", {
             run_f = ~cur_step == 4),
         g3a_report_stock(g3s_clone(stock_acd, 'report_acd') %>% gadget3:::g3s_modeltime(), stock_acd, ~stock_ss(input_stock__num)),
         g3a_report_stock(g3s_clone(stock_acd, 'report_acd') %>% gadget3:::g3s_modeltime(), stock_acd, ~stock_ss(input_stock__wgt)),
-        list())
+        # NB: Only required for testing
+        gadget3:::g3l_test_dummy_likelihood() )
 
     # Compile model
     model_fn <- g3_to_r(actions)
-    # model_fn <- edit(model_fn)
-    if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-        model_cpp <- g3_to_tmb(actions, trace = FALSE)
-        # model_cpp <- edit(model_cpp)
-        model_tmb <- g3_tmb_adfun(model_cpp, compile_flags = c("-O0", "-g"))
-    } else {
-        writeLines("# skip: not compiling TMB model")
-    }
+    model_cpp <- g3_to_tmb(actions, trace = FALSE)
 
     params <- attr(model_fn, 'parameter_template')
     result <- model_fn(params)
-
-    # Make sure the model produces identical output in TMB and R
-    if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-        param_template <- attr(model_cpp, "parameter_template")
-        param_template$value <- params[param_template$switch]
-        gadget3:::ut_tmb_r_compare(model_fn, model_tmb, param_template)
-    }
 
     for (a in paste0('age', 4:7)) {
         ok(ut_cmp_equal(
@@ -84,11 +71,11 @@ ok_group("g3a_migrate", {
     model_wgts <- attr(result, 'report_acd__wgt')[length = '10:20', age = 'age3',,]
     expected_nums <- model_nums[,1]
     expected_wgts <- model_wgts[,1]
-    ratio_add_vec <- function (orig_vec, orig_amount, new_vec, new_amount) (orig_vec * orig_amount + new_vec * new_amount)/(orig_amount + new_amount)
+    ratio_add_pop <- function (orig_vec, orig_amount, new_vec, new_amount) (orig_vec * orig_amount + new_vec * new_amount)/(orig_amount + new_amount)
     for (t in 1:((2004 - 2000) * 3)) {
         if ((t-1) %% 4 == 1) {
             # Spring migration, apply it ourselves
-            expected_wgts['a'] <- ratio_add_vec(
+            expected_wgts['a'] <- ratio_add_pop(
                 expected_wgts['a'], expected_nums['a'],
                 expected_wgts['d'], expected_nums['d'] * 0.4)
             expected_nums['a'] <- expected_nums['a'] + expected_nums['d'] * 0.4
@@ -98,13 +85,13 @@ ok_group("g3a_migrate", {
             # Autumn migration, apply it ourselves
             # NB: We shouldn't be migrating anything direct a -> d
             # c -> d
-            expected_wgts['d'] <- ratio_add_vec(
+            expected_wgts['d'] <- ratio_add_pop(
                 expected_wgts['d'], expected_nums['d'],
                 expected_wgts['c'], expected_nums['c'] * 0.6)
             expected_nums['d'] <- expected_nums['d'] + expected_nums['c'] * 0.6
             expected_nums['c'] <- expected_nums['c'] - expected_nums['c'] * 0.6
             # a -> c
-            expected_wgts['c'] <- ratio_add_vec(
+            expected_wgts['c'] <- ratio_add_pop(
                 expected_wgts['c'], expected_nums['c'],
                 expected_wgts['a'], expected_nums['a'] * 0.6)
             expected_nums['c'] <- expected_nums['c'] + expected_nums['a'] * 0.6
@@ -113,4 +100,6 @@ ok_group("g3a_migrate", {
         ok(ut_cmp_equal(model_nums[,t], expected_nums), paste0("Model numbers matched expected, t = ", t))
         ok(ut_cmp_equal(model_wgts[,t], expected_wgts), paste0("Model weights matched expected, t = ", t))
     }
+
+    gadget3:::ut_tmb_r_compare2(model_fn, model_cpp, params)
 })

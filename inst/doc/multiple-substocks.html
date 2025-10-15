@@ -141,7 +141,7 @@ area_names &lt;- g3_areas(c(&#39;IXa&#39;, &#39;IXb&#39;))
 
 actions_time &lt;- list(
   g3a_time(
-    1979L, 2023L,
+    1990L, 2023L,
     step_lengths = c(3L, 3L, 3L, 3L)),
   NULL)
 
@@ -153,13 +153,13 @@ actions &lt;- c(actions, actions_time)</code></pre>
 containing both for convenience:</p>
 <div class="modelScript">
 <pre class="r"><code># Create stock definition for fish ####################
-st_imm &lt;- g3_stock(c(species = &quot;fish&quot;, &#39;imm&#39;), seq(5L, 25L, 5)) |&gt;
-  g3s_livesonareas(area_names[&quot;IXa&quot;]) |&gt;
-  g3s_age(1L, 5L)
+st_imm &lt;- g3_stock(c(species = &quot;fish&quot;, &#39;imm&#39;), seq(5L, 100L, 5)) |&gt;
+  g3s_age(1L, 5L) |&gt;
+  g3s_livesonareas(area_names[&quot;IXa&quot;])
 
-st_mat &lt;- g3_stock(c(species = &quot;fish&quot;, &#39;mat&#39;), seq(5L, 25L, 5)) |&gt;
-  g3s_livesonareas(area_names[&quot;IXa&quot;]) |&gt;
-  g3s_age(3L, 10L)
+st_mat &lt;- g3_stock(c(species = &quot;fish&quot;, &#39;mat&#39;), seq(5L, 100L, 5)) |&gt;
+  g3s_age(3L, 10L) |&gt;
+  g3s_livesonareas(area_names[&quot;IXa&quot;])
 stocks = list(imm = st_imm, mat = st_mat)</code></pre>
 </div>
 <p>Notice that:</p>
@@ -186,7 +186,7 @@ mature:</p>
     transition_f = ~TRUE ),
   g3a_naturalmortality(st_imm),
   g3a_initialconditions_normalcv(st_imm),
-  g3a_renewal_normalparam(st_imm),
+  g3a_renewal_normalcv(st_imm),
   g3a_age(st_imm, output_stocks = list(st_mat)),
   NULL)
 
@@ -216,7 +216,7 @@ The rate of maturity is coupled to growth, which is why
 <li>Immature <code>g3a_age()</code> can also move individuals to the
 mature stock. This will happen if an immature fish ages beyond the final
 age bin (5 in our case). At that point it matures “by default”.</li>
-<li>Mature has no <code>g3a_renewal_normalparam()</code>, as there is no
+<li>Mature has no <code>g3a_renewal_normalcv()</code>, as there is no
 recruitment directly into the mature stock.</li>
 </ul>
 </div>
@@ -230,14 +230,14 @@ model. In our case we will generate random data to use later:</p>
 <pre class="r"><code># Fleet data for f_surv #################################
 
 # Landings data: For each year/step/area
-expand.grid(year = 1990:1994, step = 2, area = &#39;IXa&#39;) |&gt;
+expand.grid(year = 1990:2023, step = 2, area = &#39;IXa&#39;) |&gt;
     # Generate a random total landings by weight
-    mutate(weight = rnorm(n(), mean = 1000, sd = 100)) |&gt;
+    mutate(weight = rnorm(n(), mean = 1e5, sd = 10)) |&gt;
     # Assign result to landings_f_surv
     identity() -&gt; landings_f_surv
 
-# Length distribution data: Generate 100 random samples in each year/step/area
-expand.grid(year = 1990:1994, step = 2, area = &#39;IXa&#39;, length = rep(NA, 100)) |&gt;
+# Length distribution data: Generate 1000 random samples in each year/step/area
+expand.grid(year = 1990:2023, step = 2, area = &#39;IXa&#39;, length = rep(NA, 1000)) |&gt;
   # Generate random lengths for these samples
   mutate(length = rnorm(n(), mean = 50, sd = 20)) |&gt;
   # Save unagggregated data into ldist_f_surv.raw
@@ -249,30 +249,59 @@ ldist_f_surv.raw |&gt;
   group_by(
       year = year,
       step = step,
-      length = cut(length, breaks = c(seq(0, 80, 20), Inf), right = FALSE) ) |&gt;
+      length = cut(length, breaks = c(seq(0, 110, 5), Inf), right = FALSE) ) |&gt;
   # Report count in each length bin
   summarise(number = n(), .groups = &#39;keep&#39;) |&gt;
   # Save into ldist_f_surv
   identity() -&gt; ldist_f_surv
 
-# Assume 5 * 5 samples in each year/step/area
-expand.grid(year = 1990:1994, step = 2, area = &#39;IXa&#39;, age = rep(NA, 5), length = rep(NA, 5)) |&gt;
-  # Generate random lengths/ages for these samples
-  mutate(length = rnorm(n(), mean = 50, sd = 20)) |&gt;
+# Assume 100 * 100 samples in each year/step/area
+expand.grid(year = 1990:2023, step = 2, area = &#39;IXa&#39;, age = rep(NA, 100), length = rep(NA, 100)) |&gt;
   # Generate random whole numbers for age
-  mutate(age = floor(runif(n(), min = 1, max = 5))) |&gt;
+  mutate(age = floor(pmin(rnorm(n(), mean = 6, sd = 1), 10))) |&gt;
+  # Generate random lengths for these samples
+  mutate(length = rnorm(n(), mean = 30 + age * 2, sd = 20)) |&gt;
   # Group into length/age bins
   group_by(
       year = year,
       step = step,
       age = age,
-      length = cut(length, breaks = c(seq(0, 80, 20), Inf), right = FALSE) ) |&gt;
+      length = cut(length, breaks = c(seq(0, 110, 5), Inf), right = FALSE) ) |&gt;
   # Report count in each length bin
   summarise(number = n(), .groups = &#39;keep&#39;) -&gt;
-  aldist_f_surv</code></pre>
+  aldist_f_surv
+
+# Map maturity stage data to stocks
+as.data.frame(aldist_f_surv) |&gt;
+  # Generate random maturity stage data from age data, our stock matures between 3..5
+  mutate(maturity = age &gt; runif(n(), 3, 5)) |&gt;
+  # Map maturity stage to the stock name: Note we don&#39;t have to use the full stock name
+  mutate(stock = ifelse(maturity, &quot;mat&quot;, &quot;imm&quot;)) |&gt;
+  # Remove redundant columns
+  mutate(age = NULL, maturity = NULL) -&gt;
+  matp_f_surv</code></pre>
 </div>
 <p>For more information on how this works, see
 <code>vignette(&quot;incorporating-observation-data&quot;)</code>.</p>
+<p>As well as the data we defined last time, we also define a maturity
+stage dataset. We represent the maturity stage data by adding a “stock”
+column, when we then compare to model gadget3 will breakdown predicted
+catches by stock.</p>
+<pre class="r"><code>matp_f_surv[sample(nrow(matp_f_surv), 10),]</code></pre>
+<pre><code>##      year step   length number stock
+## 4905 2022    2 [95,100)      1   mat
+## 4618 2020    2  [45,50)     24   mat
+## 2213 2004    2  [30,35)    108   mat
+## 4916 2022    2  [40,45)     24   mat
+## 3125 2010    2  [15,20)      8   mat
+## 582  1993    2     &lt;NA&gt;     20   mat
+## 231  1991    2    [0,5)     52   mat
+## 4811 2022    2  [60,65)      9   imm
+## 2714 2008    2  [65,70)      1   imm
+## 1449 1999    2  [55,60)    214   mat</code></pre>
+<p>Also note we don’t provide the full name of a stock, this both makes
+code re-use easier and means that we would combine multiple stocks if
+there is for example a “fish_imm_m” and “fish_imm_f”.</p>
 <p>Our fleet is defined with the same set of actions as the
 single-species model:</p>
 <div class="modelScript">
@@ -306,6 +335,15 @@ actions_likelihood_f_surv &lt;- list(
     area_group = area_names,
     report = TRUE,
     nll_breakdown = TRUE),
+  g3l_catchdistribution(
+    &quot;matp_f_surv&quot;,
+    obs_data = matp_f_surv,
+    fleets = list(f_surv),
+    stocks = stocks,
+    function_f = g3l_distribution_sumofsquares(),
+    area_group = area_names,
+    report = TRUE,
+    nll_breakdown = TRUE),
   NULL)
 
 actions &lt;- c(actions, actions_f_surv, actions_likelihood_f_surv)</code></pre>
@@ -320,6 +358,9 @@ combined stock.</li>
 instructing it to have a single <code>alpha</code> &amp;
 <code>l50</code> parameter for both our stocks, as they have the same
 species name.</li>
+<li>We also define “matp_f_surv”, to make use of our maturity data. We
+still use <code>g3l_catchdistribution()</code> as before, the difference
+is in the columns of our input data.</li>
 </ul>
 <p>The <code>by_stock</code> parameter is passed through to
 <code>g3_parameterized()</code>. We can see the result of setting this
@@ -327,7 +368,7 @@ in the parameter template. If <code>by_stock = TRUE</code> (the default)
 then we get parameters for both <code>fish_imm.f_surv.l50</code> &amp;
 <code>fish_mat.f_surv.l50</code>:</p>
 <pre class="r"><code>suppressWarnings({  # NB: The model is incomplete, fish_imm__num isn&#39;t defined
-simple_model &lt;- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
+simple_model &lt;- g3_to_r(list(g3a_time(1990, 2023), g3a_predate_fleet(
     f_surv,
     stocks,
     suitabilities = g3_suitability_exponentiall50(by_stock = TRUE),
@@ -339,7 +380,7 @@ names(attr(simple_model, &quot;parameter_template&quot;))</code></pre>
 <p>If <code>by_stock = &#39;species&#39;</code>, then there is a single, shared
 <code>fish.f_surv.l50</code> parameter:</p>
 <pre class="r"><code>suppressWarnings({  # NB: The model is incomplete, fish_imm__num isn&#39;t defined
-simple_model &lt;- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
+simple_model &lt;- g3_to_r(list(g3a_time(1990, 2023), g3a_predate_fleet(
     f_surv,
     stocks,
     suitabilities = g3_suitability_exponentiall50(by_stock = &#39;species&#39;),
@@ -354,7 +395,7 @@ change the default settings, if we specify
 parameterization in other ways, for example <code>by_year = TRUE</code>
 gives us per-year <code>l50</code>:</p>
 <pre class="r"><code>suppressWarnings({  # NB: The model is incomplete, fish_imm__num isn&#39;t defined
-simple_model &lt;- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
+simple_model &lt;- g3_to_r(list(g3a_time(1990, 2023), g3a_predate_fleet(
     f_surv,
     stocks,
     suitabilities = g3_suitability_exponentiall50(
@@ -362,9 +403,19 @@ simple_model &lt;- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
     catchability_f = g3a_predate_catchability_totalfleet(1) )))
 names(attr(simple_model, &quot;parameter_template&quot;))
 })</code></pre>
-<pre><code>## [1] &quot;retro_years&quot;           &quot;fish_imm.f_surv.alpha&quot; &quot;fish.f_surv.l50.1990&quot; 
-## [4] &quot;fish.f_surv.l50.1991&quot;  &quot;fish.f_surv.l50.1992&quot;  &quot;fish.f_surv.l50.1993&quot; 
-## [7] &quot;fish.f_surv.l50.1994&quot;  &quot;fish_mat.f_surv.alpha&quot; &quot;project_years&quot;</code></pre>
+<pre><code>##  [1] &quot;retro_years&quot;           &quot;fish_imm.f_surv.alpha&quot; &quot;fish.f_surv.l50.1990&quot; 
+##  [4] &quot;fish.f_surv.l50.1991&quot;  &quot;fish.f_surv.l50.1992&quot;  &quot;fish.f_surv.l50.1993&quot; 
+##  [7] &quot;fish.f_surv.l50.1994&quot;  &quot;fish.f_surv.l50.1995&quot;  &quot;fish.f_surv.l50.1996&quot; 
+## [10] &quot;fish.f_surv.l50.1997&quot;  &quot;fish.f_surv.l50.1998&quot;  &quot;fish.f_surv.l50.1999&quot; 
+## [13] &quot;fish.f_surv.l50.2000&quot;  &quot;fish.f_surv.l50.2001&quot;  &quot;fish.f_surv.l50.2002&quot; 
+## [16] &quot;fish.f_surv.l50.2003&quot;  &quot;fish.f_surv.l50.2004&quot;  &quot;fish.f_surv.l50.2005&quot; 
+## [19] &quot;fish.f_surv.l50.2006&quot;  &quot;fish.f_surv.l50.2007&quot;  &quot;fish.f_surv.l50.2008&quot; 
+## [22] &quot;fish.f_surv.l50.2009&quot;  &quot;fish.f_surv.l50.2010&quot;  &quot;fish.f_surv.l50.2011&quot; 
+## [25] &quot;fish.f_surv.l50.2012&quot;  &quot;fish.f_surv.l50.2013&quot;  &quot;fish.f_surv.l50.2014&quot; 
+## [28] &quot;fish.f_surv.l50.2015&quot;  &quot;fish.f_surv.l50.2016&quot;  &quot;fish.f_surv.l50.2017&quot; 
+## [31] &quot;fish.f_surv.l50.2018&quot;  &quot;fish.f_surv.l50.2019&quot;  &quot;fish.f_surv.l50.2020&quot; 
+## [34] &quot;fish.f_surv.l50.2021&quot;  &quot;fish.f_surv.l50.2022&quot;  &quot;fish.f_surv.l50.2023&quot; 
+## [37] &quot;fish_mat.f_surv.alpha&quot; &quot;project_years&quot;</code></pre>
 <p>See <code>?vignette(&#39;model-customisation&#39;)</code> for more.</p>
 <p>If we had data on the distribution of mature vs. immature, our
 observation data could contain a <em>stock</em> column with
@@ -380,7 +431,7 @@ instead of a single stock, but are otherwise the same as before:</p>
 <pre class="r"><code># Create abundance index for si_cpue ########################
 
 # Generate random data
-expand.grid(year = 1990:1994, step = 3, area = &#39;IXa&#39;) |&gt;
+expand.grid(year = 1990:2023, step = 3, area = &#39;IXa&#39;) |&gt;
     # Fill in a weight column with total biomass for the year/step/area combination
     mutate(weight = runif(n(), min = 10000, max = 100000)) -&gt;
     dist_si_cpue
@@ -419,24 +470,27 @@ from the previous model:</p>
 <div class="modelScript">
 <pre class="r"><code># Guess l50 / linf based on stock sizes
 estimate_l50 &lt;- g3_stock_def(st_imm, &quot;midlen&quot;)[[length(g3_stock_def(st_imm, &quot;midlen&quot;)) / 2]]
-estimate_linf &lt;- max(g3_stock_def(st_imm, &quot;midlen&quot;))
+estimate_linf &lt;- tail(g3_stock_def(st_imm, &quot;midlen&quot;), 3)[[1]]
 estimate_t0 &lt;- g3_stock_def(st_imm, &quot;minage&quot;) - 0.8
 
 attr(model_code, &quot;parameter_template&quot;) |&gt;
-  g3_init_val(&quot;*.rec|init.scalar&quot;, 10, lower = 0.001, upper = 200) |&gt;
-  g3_init_val(&quot;*.init.#&quot;, 10, lower = 0.001, upper = 200) |&gt;
+  g3_init_val(&quot;*.rec|init.scalar&quot;, 1000, optimise = FALSE) |&gt;
+  g3_init_val(&quot;*.init.#&quot;, 10, lower = 0.001, upper = 10) |&gt;
   g3_init_val(&quot;*.rec.#&quot;, 100, lower = 1e-6, upper = 1000) |&gt;
-  g3_init_val(&quot;*.rec.sd&quot;, 5, lower = 4, upper = 20) |&gt;
-  g3_init_val(&quot;*.M.#&quot;, 0.15, lower = 0.001, upper = 1) |&gt;
-  g3_init_val(&quot;init.F&quot;, 0.5, lower = 0.1, upper = 1) |&gt;
-  g3_init_val(&quot;*.Linf&quot;, estimate_linf, spread = 0.2) |&gt;
+  g3_init_val(&quot;*.rec.proj&quot;, 0.002) |&gt;
+  g3_init_val(&quot;*.M.#&quot;, 0.15, lower = 0.001, upper = 10) |&gt;
+  g3_init_val(&quot;init.F&quot;, 0.5, lower = 0.1, upper = 10) |&gt;
+  g3_init_val(&quot;*.Linf&quot;, estimate_linf, spread = 2) |&gt;
   g3_init_val(&quot;*.K&quot;, 0.3, lower = 0.04, upper = 1.2) |&gt;
-  g3_init_val(&quot;*.t0&quot;, estimate_t0, spread = 2) |&gt;
+  g3_init_val(&quot;*.t0&quot;, estimate_t0, optimise = FALSE) |&gt;
   g3_init_val(&quot;*.walpha&quot;, 0.01, optimise = FALSE) |&gt;
   g3_init_val(&quot;*.wbeta&quot;, 3, optimise = FALSE) |&gt;
-  g3_init_val(&quot;*.*.alpha&quot;, 0.07, lower = 0.01, upper = 0.2) |&gt;
-  g3_init_val(&quot;*.*.l50&quot;, estimate_l50, spread = 0.25) |&gt;
-  g3_init_val(&quot;*.bbin&quot;, 100, lower = 1e-05, upper = 1000) |&gt;
+  g3_init_val(&quot;*.*.alpha&quot;, 0.07, lower = 0.01, upper = 1.8) |&gt;
+  g3_init_val(&quot;*.*.l50&quot;, estimate_l50, spread = 1.5) |&gt;
+  # Treat maturity alpha/l50 separately
+  g3_init_val(&quot;*.mat.alpha&quot;, 0.07, lower = 0.0001, upper = 1.8) |&gt;
+  g3_init_val(&quot;*.mat.l50&quot;, estimate_l50, spread = 3.5) |&gt;
+  g3_init_val(&quot;*.bbin&quot;, 100, lower = 1e-05, upper = 1500) |&gt;
   identity() -&gt; params.in</code></pre>
 </div>
 <p>Finally we are ready for optimisation runs.
@@ -454,7 +508,7 @@ params.out &lt;- gadgetutils::g3_iterative(getwd(),
     model = model_code,
     params.in = params.in,
     grouping = list(
-        fleet = c(&quot;ldist_f_surv&quot;, &quot;aldist_f_surv&quot;),
+        fleet = c(&quot;ldist_f_surv&quot;, &quot;aldist_f_surv&quot;, &quot;matp_f_surv&quot;),
         abund = c(&quot;dist_si_cpue&quot;)),
     method = &quot;BFGS&quot;,
     control = list(maxit = 1000, reltol = 1e-10),

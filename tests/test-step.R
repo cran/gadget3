@@ -75,7 +75,7 @@ ok_group("g3_step:stock_reshape", {
     nll <- 0.0
     actions <- list(
         g3a_time(1999, 1999),
-        g3a_initialconditions(source, ~g3_param_vector("source_num"), ~g3_param_vector("source_wgt")),
+        gadget3:::g3a_initialconditions_manual(source, ~g3_param_vector("source_num", value = rep(0, 4)), ~g3_param_vector("source_wgt", value = rep(0, 4))),
 
         list('900:dest_even' = gadget3:::g3_step(~stock_iterate(dest_even, stock_intersect(source, {
             stock_ss(dest_even__num) <- stock_reshape(dest_even, stock_ss(source__num))
@@ -108,26 +108,17 @@ ok_group("g3_step:stock_reshape", {
             REPORT(dest_nolength__num)
         })))),
 
-        list('999' = ~{
-            nll <- nll + g3_param('x', value = 1.0)
-        }))
+        # NB: Only required for testing
+        gadget3:::g3l_test_dummy_likelihood() )
 
     # Compile model
     model_fn <- g3_to_r(actions)
-    # model_fn <- edit(model_fn)
+    model_cpp <- g3_to_tmb(actions, trace = FALSE)
+
     params <- attr(model_fn, 'parameter_template')
     params[["source_num"]] <- c(11, 22, 33, 44)
     params[["source_wgt"]] <- c(11, 22, 33, 44)
     result <- model_fn(params)
-
-    if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-        model_cpp <- g3_to_tmb(actions, trace = FALSE)
-        # model_cpp <- edit(model_cpp)
-        model_tmb <- g3_tmb_adfun(model_cpp, params, compile_flags = c("-O0", "-g"))
-    } else {
-        writeLines("# skip: not compiling TMB model")
-        model_cpp <- c()
-    }
 
     ok(ut_cmp_identical(
         sort(all.vars(body(model_fn))[endsWith(all.vars(body(model_fn)), '_lgmatrix')]),
@@ -155,13 +146,52 @@ ok_group("g3_step:stock_reshape", {
         as.vector(attr(result, 'dest_nolength__num')),
         sum(11, 22, 33, 44)), "dest_nolength__num")
 
-    if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-        param_template <- attr(model_cpp, "parameter_template")
-        param_template$value <- params[param_template$switch]
-        gadget3:::ut_tmb_r_compare(model_fn, model_tmb, param_template)
-    } else {
-        writeLines("# skip: not running TMB tests")
-    }
+    gadget3:::ut_tmb_r_compare2(model_fn, model_cpp, params, g3_test_tmb = 2)
+})
+
+ok_group("g3_step:stock_combine_subpop", {
+    source_dw <- g3_stock('source_dw', c(10, 20, 30, 40)) |> g3s_age(1,1)
+    subpop_dw <- g3_stock('subpop_dw', c(20, 40, 80)) |> g3s_age(1,1)  # Wider top and bottom
+
+    actions <- list(
+        g3a_time(2000, 2001),
+        gadget3:::g3a_initialconditions_normalcv(source_dw),
+        gadget3:::g3a_initialconditions_normalcv(subpop_dw),
+
+        list('900:subpop_dw' = gadget3:::g3_step(~stock_iterate(subpop_dw, stock_intersect(source_dw, {
+            stock_combine_subpop(stock_ss(source_dw__num), stock_ss(subpop_dw__num))
+        })))),
+
+        # NB: Only required for testing
+        gadget3:::g3l_test_dummy_likelihood() )
+    full_actions <- c(actions, list(
+        g3a_report_detail(actions),
+        NULL ))
+    model_fn <- g3_to_r(full_actions)
+    model_cpp <- g3_to_tmb(full_actions)
+
+    attr(model_cpp, "parameter_template") |>
+          g3_init_val("source_dw.Linf", 80) |>
+          g3_init_val("subpop_dw.Linf", 80) |>
+          g3_init_val("*.K", 0.3) |>
+          g3_init_val("*.t0", -0.8) |>
+          g3_init_val("*.t0", -0.8) |>
+          g3_init_val("*.walpha", 0.01) |>
+          g3_init_val("*.wbeta", 3) |>
+        identity() -> params.in
+
+    r <- attributes(model_fn(params.in))
+
+    ok(!isTRUE(all.equal(r$dstart_source_dw__num[,,1], r$dstart_source_dw__num[,,2])), "dstart_source_dw__num: Changed during model")
+    ok(ut_cmp_equal(
+        r$dstart_source_dw__num[,,1] + c(
+            0,  # 10:20 not represented in subpop
+            r$dstart_subpop_dw__num[1,,1] / 2,  # 20:30 has half of 20:40
+            r$dstart_subpop_dw__num[1,,1] / 2,  # 30:40 has half of 20:40
+            r$dstart_subpop_dw__num[2,,1] + r$dstart_subpop_dw__num[3,,1] ),
+        r$dstart_source_dw__num[,,2] ), "dstart_source_dw__num: Has dstart_subpop_dw__num summed onto it")
+
+    gadget3:::ut_tmb_r_compare2(model_fn, model_cpp, params.in, g3_test_tmb = 2)
 })
 
 ok_group("g3_step:stock_ss", {
@@ -447,6 +477,24 @@ ok_group("g3_step:stock_prepend:table", {
         }), "name_part can contain multiple name_parts, get used in order")
 })
 
+ok_group("g3_step:stock_hasdim", local({
+    st <- g3_stock("st_a", 1:10)
+    fl <- g3_fleet("fl_a") |> g3s_livesonareas(1)
+
+    ok(cmp_code(
+        gadget3:::g3_step(~{
+            if (stock_hasdim(st, "length")) "yes" else "no"
+            if (stock_hasdim(st, "area")) "yes" else "no"
+            if (stock_hasdim(fl, "length")) "yes" else "no"
+            if (stock_hasdim(fl, "area")) "yes" else "no"
+        }), ~{
+            "yes"
+            "no"
+            "no"
+            "yes"
+        }), "stock_hasdim: Stocks have length, fleet has area")
+}))
+
 ok_group("list_to_stock_switch", {
     # NB: Differing names, ordinarily stock_imm would be "prey_stock", e.g.
     stock_imm <- g3_stock('ling_imm', c(1))
@@ -583,4 +631,14 @@ ok_group("g3_step:resolve_stock_list", local({
     ok(gadget3:::ut_cmp_code(
         gadget3:::resolve_stock_list(g3_formula(1 + 1), st_c),
         g3_formula(1 + 1) ), "Single item / st_c (return regardless)")
+    ok(gadget3:::ut_cmp_code(
+        gadget3:::resolve_stock_list(list(st_c = 44), st_c),
+        44 ), "Single named item / st_c (return without name)")
+
+    ok(gadget3:::ut_cmp_code(
+        gadget3:::resolve_stock_list(c(st_a = 1, st_b = 2, st_c = 3), st_b),
+        2 ), "Named vector (return unnamed value)")
+    ok(gadget3:::ut_cmp_code(
+        gadget3:::resolve_stock_list(c(st_a = 1, st_b = 2, st_c = 3), st_c),
+        3 ), "Named vector (return unnamed value)")
 }))

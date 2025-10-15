@@ -12,13 +12,13 @@ set.seed(123)
 
 
 ## ----eval=FALSE---------------------------------------------------------------
-#  install.packages('gadget3')
+# install.packages('gadget3')
 
 ## ----eval=FALSE---------------------------------------------------------------
-#  install.packages('MFDB')
-#  remotes::install_github('gadget-framework/gadgetutils')
-#  remotes::install_github('gadget-framework/gadgetplots')
-#  remotes::install_github('gadget-framework/g3experiments')
+# install.packages('MFDB')
+# remotes::install_github('gadget-framework/gadgetutils')
+# remotes::install_github('gadget-framework/gadgetplots')
+# remotes::install_github('gadget-framework/g3experiments')
 
 ## ----warning = FALSE, message = FALSE-----------------------------------------
 library(gadget3)
@@ -187,9 +187,7 @@ cut(c(50), breaks = c(seq(0, 80, 20), Inf), right = FALSE)
 summary(ldist_f_surv)
 years <- 1990:1994
 par(mfrow=c(2, ceiling(length(years) / 2)))
-for (y in years) plot(as.data.frame(ldist_f_surv) |>
-    filter(year == y & step == 2) |>
-    select(length, number), main = y, ylim = c(0, 60))
+for (y in years) g3_array_plot(xtabs(number ~ length + year, ldist_f_surv)[,as.character(y)])
 
 ## -----------------------------------------------------------------------------
 # Assume 100 * 100 samples in each year/step/area
@@ -213,10 +211,8 @@ summary(aldist_f_surv)
 years <- 1990:1994
 ages <- unique(aldist_f_surv$age)
 
-par(mfrow=c(length(years), length(ages)), mar = c(2,2,1,0))
-for (y in years) for (a in ages) plot(as.data.frame(ldist_f_surv) |>
-    filter(year == y & step == 2) |>
-    select(length, number), main = sprintf("year = %d, age = %s", y, a), ylim = c(0, 60))
+par(mfrow=c(ceiling(length(years) / 2), 2), mar = c(2,2,1,0))
+for (y in years) g3_array_plot(xtabs(number ~ length + age + year, aldist_f_surv)[,,as.character(y)])
 
 ## -----------------------------------------------------------------------------
 # Create fleet definition for f_surv ####################
@@ -348,28 +344,28 @@ attr(model_code, "parameter_template") |>
   identity() -> params.in
 
 ## ----eval=nzchar(Sys.getenv('G3_TEST_TMB'))-----------------------------------
-#  # Optimise model ################################
-#  obj.fn <- g3_tmb_adfun(model_code, params.in)
-#  
-#  params.out <- gadgetutils::g3_iterative(getwd(),
-#      wgts = "WGTS",
-#      model = model_code,
-#      params.in = params.in,
-#      grouping = list(
-#          fleet = c("ldist_f_surv", "aldist_f_surv"),
-#          abund = c("dist_si_cpue")),
-#      method = "BFGS",
-#      control = list(maxit = 1000, reltol = 1e-10),
-#      cv_floor = 0.05)
+# # Optimise model ################################
+# obj.fn <- g3_tmb_adfun(model_code, params.in)
+# 
+# params.out <- gadgetutils::g3_iterative(getwd(),
+#     wgts = "WGTS",
+#     model = model_code,
+#     params.in = params.in,
+#     grouping = list(
+#         fleet = c("ldist_f_surv", "aldist_f_surv"),
+#         abund = c("dist_si_cpue")),
+#     method = "BFGS",
+#     control = list(maxit = 1000, reltol = 1e-10),
+#     cv_floor = 0.05)
 
 ## ----eval=nzchar(Sys.getenv('G3_TEST_TMB'))-----------------------------------
-#  # Generate detailed report ######################
-#  fit <- gadgetutils::g3_fit(model_code, params.out)
-#  gadgetplots::gadget_plots(fit, "figs", file_type = "html")
+# # Generate detailed report ######################
+# fit <- gadgetutils::g3_fit(model_code, params.out)
+# gadgetplots::gadget_plots(fit, "figs", file_type = "html")
 
 ## ----eval=FALSE---------------------------------------------------------------
-#  utils::browseURL("figs/model_output_figures.html")
+# utils::browseURL("figs/model_output_figures.html")
 
 ## ----echo=FALSE, eval=nzchar(Sys.getenv('G3_TEST_TMB'))-----------------------
-#  gadget3:::vignette_test_output("introduction-single-stock", model_code, params.out)
+# gadget3:::vignette_test_output("introduction-single-stock", model_code, params.out)
 

@@ -20,8 +20,8 @@ actions <- list(
   g3a_time(
     1980, 1995,
     step_lengths = c(6L, 6L)),
-  g3a_initialconditions(st_imm_f, quote( 0 * stock__midlen ), quote( 0 * stock__midlen )),
-  g3a_initialconditions(st_imm_m, quote( 0 * stock__midlen ), quote( 0 * stock__midlen )),
+  gadget3:::g3a_initialconditions_manual(st_imm_f, quote( 0 * stock__midlen ), quote( 0 * stock__midlen )),
+  gadget3:::g3a_initialconditions_manual(st_imm_m, quote( 0 * stock__midlen ), quote( 0 * stock__midlen )),
   g3a_initialconditions_normalcv(st_mat),
   g3a_spawn(
     st_mat,
@@ -39,7 +39,9 @@ actions <- list(
     run_f = quote( cur_step == 1 ) ),
   g3a_age(st_imm_f),
   g3a_age(st_imm_m),
-  g3a_age(st_mat) )
+  g3a_age(st_mat),
+  # NB: Only required for testing
+  gadget3:::g3l_test_dummy_likelihood() )
 
 # Compile model
 model_fn <- g3_to_r(c(actions, list(

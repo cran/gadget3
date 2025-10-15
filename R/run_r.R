@@ -221,6 +221,10 @@ g3_to_r <- function(
         list(quote( if (is.data.frame(param)) {
             param_lower <- structure(param$lower, names = param$switch)
             param_upper <- structure(param$upper, names = param$switch)
+            logarithmic <- grepl("(^|:)LOG(:|$)", param$type)
+            param$value[logarithmic] <- lapply(param[logarithmic, "value"], log)
+            param_lower[logarithmic] <- lapply(param_lower[logarithmic], log)
+            param_upper[logarithmic] <- lapply(param_upper[logarithmic], log)
             param <- structure(param$value, names = param$switch)
         } else {
             # No bounds, map to NA
@@ -261,6 +265,7 @@ g3_to_r <- function(
 g3_r_compile <- function (model, work_dir = tempdir(), cmp_options = list(optimize = 3)) {
     model_string <- deparse(model)
     base_name <- paste0('g3_r_', digest::sha1(model_string))
+    if (!dir.exists(work_dir)) dir.create(work_dir, showWarnings = FALSE, recursive = TRUE)
     r_path <- paste0(file.path(work_dir, base_name), '.R')
 
     # Write out file so srcRef is populated
@@ -303,10 +308,10 @@ print.g3_r <- function(x, ..., with_environment = FALSE, with_template = FALSE) 
         env_names <- setdiff(names(environment(x)), "parameter_template")
 
         writeLines("Environment:")
-        str(as.list(environment(x))[env_names], no.list = TRUE)
+        utils::str(as.list(environment(x))[env_names], no.list = TRUE)
     }
     if (with_template) {
         writeLines("Parameter template:")
-        str(a$parameter_template, no.list = TRUE)
+        utils::str(a$parameter_template, no.list = TRUE)
     }
 }

@@ -67,22 +67,24 @@ ok_group('g3a_mature', {
     stock_mat2 <- g3_stock('stock_mat2', seq(10, 40, 10)) %>% g3s_age(5, 7)
 
     ok(ut_cmp_error(
-        g3a_mature(stock_imm, ~g3_param_vector("maturity"), list(stock_mat1, stock_mat2), output_ratios = c(9,9,9)),
+        g3a_mature(stock_imm, ~g3_param_vector("maturity", value = rep(0, 4)), list(stock_mat1, stock_mat2), output_ratios = c(9,9,9)),
         "output_ratios"), "Length of output_ratios must match")
     ok(ut_cmp_error(
-        g3a_mature(stock_imm, ~g3_param_vector("maturity"), list(stock_mat1, stock_mat2), output_ratios = c(9,9)),
+        g3a_mature(stock_imm, ~g3_param_vector("maturity", value = rep(0, 4)), list(stock_mat1, stock_mat2), output_ratios = c(9,9)),
         "output_ratios"), "output_ratios must sum to 1")
 
     actions <- list(
         g3a_time(2000, 2000, project_years = 0),
-        g3a_initialconditions(stock_imm, ~max(6L - age, 1L) * g3_param_vector("imm_init_num"), ~g3_param_vector("imm_init_wgt")),
-        g3a_initialconditions(stock_mat1, ~max(6L - age, 1L) * g3_param_vector("mat1_init_num"), ~g3_param_vector("mat1_init_wgt")),
-        g3a_initialconditions(stock_mat2, ~max(6L - age, 1L) * g3_param_vector("mat2_init_num"), ~g3_param_vector("mat2_init_wgt")),
+        gadget3:::g3a_initialconditions_manual(stock_imm, ~max(6L - age, 1L) * g3_param_vector("imm_init_num", value = rep(0, 4)), ~g3_param_vector("imm_init_wgt", value = rep(0, 4))),
+        gadget3:::g3a_initialconditions_manual(stock_mat1, ~max(6L - age, 1L) * g3_param_vector("mat1_init_num", value = rep(0, 4)), ~g3_param_vector("mat1_init_wgt", value = rep(0, 4))),
+        gadget3:::g3a_initialconditions_manual(stock_mat2, ~max(6L - age, 1L) * g3_param_vector("mat2_init_num", value = rep(0, 4)), ~g3_param_vector("mat2_init_wgt", value = rep(0, 4))),
         g3a_mature(stock_imm,
-            ~g3_param_vector("maturity"),
+            ~g3_param_vector("maturity", value = rep(0, 4)),
             list(stock_mat1, stock_mat2),
             output_ratios = list(~g3_param("ratio_mat1"), ~g3_param("ratio_mat2")),
             run_f = ~g3_param("run_f") == 1),
+        # NB: Only required for testing
+        gadget3:::g3l_test_dummy_likelihood(),
         list(
             '999' = ~{
                 REPORT(stock_imm__num)
@@ -91,12 +93,12 @@ ok_group('g3a_mature', {
                 REPORT(stock_mat1__wgt)
                 REPORT(stock_mat2__num)
                 REPORT(stock_mat2__wgt)
-                nll <- nll + g3_param('x')
                 return(nll)
             }))
 
     # Compile model
     model_fn <- g3_to_r(actions, trace = FALSE)
+    model_cpp <- g3_to_tmb(actions)
     # model_fn <- edit(model_fn)
     params <- attr(model_fn, 'parameter_template')
     params$imm_init_num <- c(101, 102, 103, 104)
@@ -109,14 +111,6 @@ ok_group('g3a_mature', {
     params$ratio_mat1 <- 0.5
     params$ratio_mat2 <- 0.5
     params$run_f <- 1  # TODO: if(param) is naughty
-
-    if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-        model_cpp <- g3_to_tmb(actions, trace = FALSE)
-        # model_cpp <- edit(model_cpp)
-        model_tmb <- g3_tmb_adfun(model_cpp, params, compile_flags = c("-O0", "-g"))
-    } else {
-        writeLines("# skip: not compiling TMB model")
-    }
 
     ok_group("Move all of length 30 into mat1/mat2", {
         params <- attr(model_fn, 'parameter_template')
@@ -152,11 +146,7 @@ ok_group('g3a_mature', {
             as.vector(r$stock_mat2__num[length = '30:40',]),
             c(51.5, 51.5, 51.5)), "stock_mat2__num: Just age 5/6/7")
 
-        if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-            param_template <- attr(model_cpp, "parameter_template")
-            param_template$value <- params[param_template$switch]
-            gadget3:::ut_tmb_r_compare(model_fn, model_tmb, param_template)
-        }
+        gadget3:::ut_tmb_r_compare2(model_fn, model_cpp, params)
     })
 
     ok_group("Move all of length 30 into 90% mat1, 10% mat2", {
@@ -184,11 +174,7 @@ ok_group('g3a_mature', {
             as.vector(r$stock_mat2__num[,'age5']),
             c(0, 0, 103 * 0.1, 0)), "stock_mat2__num")
 
-        if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-            param_template <- attr(model_cpp, "parameter_template")
-            param_template$value <- params[param_template$switch]
-            gadget3:::ut_tmb_r_compare(model_fn, model_tmb, param_template)
-        }
+        gadget3:::ut_tmb_r_compare2(model_fn, model_cpp, params)
     })
 
     ok_group("Move 50% of length 30, 75% of length 40", {
@@ -216,11 +202,7 @@ ok_group('g3a_mature', {
             as.vector(r$stock_mat2__num[,'age5']),
             c(0, 0, 103 * 0.5 / 2, 104 * 0.75 / 2)), "stock_mat2__num")
 
-        if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-            param_template <- attr(model_cpp, "parameter_template")
-            param_template$value <- params[param_template$switch]
-            gadget3:::ut_tmb_r_compare(model_fn, model_tmb, param_template)
-        }
+        gadget3:::ut_tmb_r_compare2(model_fn, model_cpp, params)
     })
 
     ok_group("Disable with run_f = 0", {
@@ -248,11 +230,7 @@ ok_group('g3a_mature', {
             as.vector(r$stock_mat2__num[,'age5']),
             c(0, 0, 0, 0)), "stock_mat2__num same as start")
 
-        if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-            param_template <- attr(model_cpp, "parameter_template")
-            param_template$value <- params[param_template$switch]
-            gadget3:::ut_tmb_r_compare(model_fn, model_tmb, param_template)
-        }
+        gadget3:::ut_tmb_r_compare2(model_fn, model_cpp, params)
     })
 })
 
@@ -262,7 +240,7 @@ ok_group('movement with non-conforming stocks', {
     prey_b <- g3_stock('prey_b', seq(20, 160, 4)) %>% g3s_age(11, 15)
     prey_c <- g3_stock('prey_c', seq(20, 164, 4)) %>% g3s_age(11, 15)
     # Build model, if missing vars are present the warning will be translated into error
-    m <- g3_to_r(list(
+    m <- suppressWarnings(g3_to_r(list(
         g3a_time(2000, 2002, step_lengths = c(6, 6), project_years = 0),
-        g3a_age(prey_a, output_stocks = list(prey_b, prey_c), output_ratios = c(0.5,0.5))))
+        g3a_age(prey_a, output_stocks = list(prey_b, prey_c), output_ratios = c(0.5,0.5)))))
 })

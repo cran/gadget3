@@ -11,7 +11,7 @@ fleet_a <- g3_fleet('fleet_a')
 
 actions <- list(
     g3a_time(2000, ~2000 + g3_param('years', value = 1) - 1, step_lengths = c(6,6), project_years = 0),
-    g3a_initialconditions(prey_a, ~10 * prey_a__midlen, ~100 * prey_a__midlen),
+    gadget3:::g3a_initialconditions_manual(prey_a, ~10 * prey_a__midlen, ~100 * prey_a__midlen),
     g3a_predate_tagrelease(
         fleet_a,
         list(prey_a),
@@ -29,22 +29,15 @@ actions <- list(
         list(prey_a),
         tagshed_f = log(8),  # i.e. 0.125 will loose their tag
         run_f = ~cur_year >= g3_param('tagshed_start', value = 2999)),
-    list())
+    # NB: Only required for testing
+    gadget3:::g3l_test_dummy_likelihood() )
 actions <- c(actions, list(
     g3a_report_history(actions, "__cons"),
     g3a_report_history(actions)))
 
 # Compile model
 model_fn <- g3_to_r(actions, trace = FALSE)
-# model_fn <- edit(model_fn)
-if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-    model_cpp <- g3_to_tmb(actions, trace = FALSE)
-    # model_cpp <- edit(model_cpp)
-    model_tmb <- g3_tmb_adfun(model_cpp, compile_flags = c("-O0", "-g"), output_script = FALSE)
-    #writeLines(TMB::gdbsource(model_tmb))
-} else {
-    writeLines("# skip: not compiling TMB model")
-}
+model_cpp <- g3_to_tmb(actions, trace = FALSE)
 
 ok_group("tagging without mortality", {
     params <- attr(model_fn, 'parameter_template')
@@ -91,12 +84,7 @@ ok_group("tagging without mortality", {
         }
     }
 
-    if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-        param_template <- attr(model_cpp, "parameter_template")
-        param_template$value <- params[param_template$switch]
-        model_tmb <- g3_tmb_adfun(model_cpp, param_template, compile_flags = c("-O0", "-g"))
-        gadget3:::ut_tmb_r_compare(model_fn, model_tmb, param_template)
-    }
+    gadget3:::ut_tmb_r_compare2(model_fn, model_cpp, params)
 })
 
 ok_group("tagging with mortality", {
@@ -141,12 +129,7 @@ ok_group("tagging with mortality", {
         }
     }
 
-    if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-        param_template <- attr(model_cpp, "parameter_template")
-        param_template$value <- params[param_template$switch]
-        model_tmb <- g3_tmb_adfun(model_cpp, param_template, compile_flags = c("-O0", "-g"))
-        gadget3:::ut_tmb_r_compare(model_fn, model_tmb, param_template)
-    }
+    gadget3:::ut_tmb_r_compare2(model_fn, model_cpp, params)
 })
 
 ok_group("tag shedding", {
@@ -195,10 +178,5 @@ ok_group("tag shedding", {
         }
     }
 
-    if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-        param_template <- attr(model_cpp, "parameter_template")
-        param_template$value <- params[param_template$switch]
-        model_tmb <- g3_tmb_adfun(model_cpp, param_template, compile_flags = c("-O0", "-g"))
-        gadget3:::ut_tmb_r_compare(model_fn, model_tmb, param_template)
-    }
+    gadget3:::ut_tmb_r_compare2(model_fn, model_cpp, params)
 })

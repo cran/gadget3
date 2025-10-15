@@ -96,7 +96,7 @@ g3a_predate_catchability_project <- function (
             suit_unit = "number of individuals",
             suit = quote( suit_f * stock_ss(stock__num) ),
             cons = f_substitute(
-                quote( stock_ss(predprey__suit) * combined_f ),
+                quote( stock_ss(predprey__suit) * combined_f * stock_ss(stock__wgt) ),
                 list(combined_f = combined_f)) )
     } else stop("Unknown suitability unit ", suit_unit)
 }
@@ -250,6 +250,12 @@ g3a_predate <- function (
 
     stopifnot(g3_is_stock(predstock))
     stopifnot(is.list(prey_stocks) && all(sapply(prey_stocks, g3_is_stock)))
+    if (rlang::is_formula(catchability_f)) catchability_f <- list(
+        # Back-compatibility, for e.g. g3experiments::g3a_predate_catchability_hockeyfleet()
+        suit_unit = "total biomass",
+        suit = quote( suit_f * stock_ss(stock__num) * stock_ss(stock__wgt) ),
+        cons = catchability_f )
+    stopifnot(is.list(catchability_f) && all(c("cons", "suit", "suit_unit") %in% names(catchability_f)))
 
     # Variables used:
     # stock__totalpredate: Biomass of total consumed (prey_stock) (prey matrix)
@@ -257,7 +263,7 @@ g3a_predate <- function (
     # stock__overconsumption: Single figure, proportion of total biomass consumed to total biomass hoping to be consumed. Used by g3l_understocking()
     # predstock__totalsuit: Total prey suitable for consumption by pred
     # predprey__cons: Biomass of prey consumed by pred
-    # predprey__suit: Biomass of prey suitable for consumption by pred
+    # predprey__suit: Biomass/number of prey suitable for consumption by pred
 
     predstock__feedinglevel <- g3_stock_instance(predstock, desc = "Fraction of the available food that the predator is consuming")
     predstock__totalsuit <- g3_stock_instance(predstock, desc = paste0("Total suitable prey by ", catchability_f$suit_unit))
@@ -301,26 +307,18 @@ g3a_predate <- function (
             stock_with(predstock, predstock__totalsuit[] <- 0)
         })
 
-        # Generate suitability array for this stock
+        # Generate suitability reports for this stock
         suitrep_step <- g3a_suitability_report(
             predstock,
             stock,
             resolve_stock_list(suitabilities, stock) )
         # Add suitability report steps to our list
         for (i in seq_along(suitrep_step)) out[[names(suitrep_step)[[i]]]] <- suitrep_step[[i]]
-        # Find the suitability report definition
-        suitrep <- environment(suitrep_step[[1]])$suitrep
-        suitrep__report <- environment(suitrep_step[[1]])$suitrep__report
 
         # Main predation step, iterate over prey and pull out everything this fleet needs
         catchability <- f_substitute(catchability_f$suit, list(suit_f = quote(suitability)))
-        if (!is.null(suitrep$iter_ss$length)) {
-            # suitrep is a length vector
-            environment(catchability)$suitability <- g3_step(~stock_with(suitrep, g3_cast_vector(stock_ss(suitrep__report, vec = length))), recursing = TRUE)
-        } else {
-            # suitrep is a constant
-            environment(catchability)$suitability <- g3_step(~stock_with(suitrep, stock_ss(suitrep__report, vec = single)), recursing = TRUE)
-        }
+        environment(catchability)$suitability <- list_to_stock_switch(suitabilities)
+
         out[[step_id(run_at, "g3a_predate", 1, predstock, stock, action_name)]] <- g3_step(f_substitute(~{
             debug_label("g3a_predate for ", predstock, " predating ", stock)
             stock_with(predprey, predprey__suit[] <- 0)

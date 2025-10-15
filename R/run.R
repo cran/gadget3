@@ -97,7 +97,8 @@ update_data_bounds <- function (model_data, param_tmpl) {
                 if (!exists(data_var, envir = model_data)) next
 
                 data_val <- param_tmpl[i, param_type]
-                model_data[[data_var]] <- if (is.na(data_val)) NaN else data_val
+                logarithmic <- grepl("(^|:)LOG(:|$)", param_tmpl[i, 'type'])
+                model_data[[data_var]] <- if (is.na(data_val)) NaN else if (logarithmic) log(data_val) else data_val
             }
         }
     } else {
@@ -129,3 +130,25 @@ gen_param_tbl_name <- function (base, vals) {
     if (endsWith(base, '_exp')) out <- paste0(out, '_exp')
     return(out)
 }
+
+# Extract version info stored in description
+package_version_info <- function (pkg) {
+    desc <- utils::packageDescription(pkg)
+
+    # https://github.com/r-lib/remotes/blob/main/R/install-github.R#L125-L150
+    if (!is.null(desc$RemoteSha)) return(paste(
+        desc$Version,
+        desc$RemoteSha,
+        sep = "-" ))
+
+    # https://github.com/r-lib/remotes/blob/main/R/install-local.R#L72-L78
+    if (!is.null(desc$RemoteUrl)) return(paste(
+        desc$Version,
+        paste(desc$RemoteType, desc$RemoteUrl, sep = ":"),
+        sep = "-" ))
+
+    return(paste(
+        desc$Version,
+        sep = "-" ))
+}
+# package_version_info("TMB") ; package_version_info("gadgetplots") ; package_version_info("gadget3")

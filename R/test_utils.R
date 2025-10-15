@@ -1,44 +1,28 @@
 # Helpers for unit testing, not for general use
 
-# Compare output of TMB & R model runs
-ut_tmb_r_compare <- function (model_fn, model_tmb, param_template, model_cpp = NULL) {
-    dearray <- function (x) {
-        # TMB Will produce 0/1 for TRUE/FALSE
-        if (is.logical(x)) {
-            oldattr <- attributes(x)
-            x <- as.numeric(x)
-            attributes(x) <- oldattr  # Preserve arrayness
-        }
-        return(x)
-    }
+# A TMB model needs at least one optimisable paramter, which a lot of tests won't be doing.
+g3l_test_dummy_likelihood <- function (
+        run_at = g3_action_order$likelihood) {
+    out <- new.env(parent = emptyenv())
 
-    if (!is.data.frame(param_template)) {
-        if (is.null(model_cpp)) stop("Provide model_cpp if param_template is a list")
-        pt <- attr(model_cpp, 'parameter_template')
-        pt$value <- param_template
-        param_template <- pt
-    }
-
-    if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-        model_tmb_report <- model_tmb$report(g3_tmb_par(param_template))
-        r_result <- model_fn(param_template$value)
-        for (n in names(attributes(r_result))) {
-            unittest::ok(unittest::ut_cmp_equal(
-                dearray(model_tmb_report[[n]]),
-                dearray(attr(r_result, n)),
-                tolerance = 1e-5), paste("TMB and R match", n))
-        }
-    } else {
-        writeLines("# skip: not running TMB tests")
-    }
+    out[[step_id(run_at, 'g3l_test_dummy_likelihood', 0)]] <- g3_step(f_substitute(~{
+        debug_label("g3l_test_dummy_likelihood: Dummy likelihood so all tests have an optimisable parameter")
+        nll <- nll + 0 * dummy_f
+    }, list(
+        dummy_f = g3_parameterized("x", value = 0.0, lower = -1, upper = 1),
+        end = NULL )))
+    return(as.list(out))
 }
 
-# Re-implementation that can handle changing non-optimised parameters
+# Compare output of TMB & R model runs
 ut_tmb_r_compare2 <- function (
         model_fn,
         model_cpp,
         params,
+        g3_test_tmb = 1,
         gdbsource = FALSE,
+        test_tmb_fn = TRUE,
+        skip_re = NULL,
         tolerance = 1e-5 ) {
     dearray <- function (x) {
         # TMB Will produce 0/1 for TRUE/FALSE
@@ -52,13 +36,35 @@ ut_tmb_r_compare2 <- function (
             # fishingyear dimensions aren't preserved yet, we'd need to do more gen_dimnames magic
             dimnames(x)$fishingyear <- NULL
         }
+        if (is.array(x) && length(dim) == 1 && is.null(dimnames(x))) {
+            # TMB output won't preserve array-ness of 1-length vectors without dims (see ratio_add_pop tests)
+            x <- as.vector(x)
+        }
         return(x)
     }
+    val_test <- function (n, ...) {
+        vals <- list(...)
+        msg <- paste0(
+            paste(names(vals), collapse = " and "),
+            " match: ",
+            n )
+        if (!is.null(skip_re) && grepl(skip_re, n)) {
+            writeLines(paste0("# skip: ", msg))
+            return(TRUE)
+        }
+        unittest::ok(unittest::ut_cmp_equal(
+            vals[[1]],
+            vals[[2]],
+            tolerance = tolerance ), msg)
+    }
 
-    if (!nzchar(Sys.getenv('G3_TEST_TMB'))) {
-        writeLines("# skip: not running TMB tests")
+    cur_g3_test_tmb <- as.integer(Sys.getenv('G3_TEST_TMB'))
+    if (is.na(cur_g3_test_tmb)) cur_g3_test_tmb <- 0
+    if (cur_g3_test_tmb < g3_test_tmb) {
+        writeLines(paste("# skip: not running TMB tests", cur_g3_test_tmb, " < ", g3_test_tmb))
         return()
     }
+    work_dir <- Sys.getenv('G3_TEST_TMB_WORK_DIR', unset = getOption('gadget3.tmb.work_dir', default = tempdir()))
 
     if (is.data.frame(params)) {
         # Input params is already a parameter template
@@ -67,32 +73,36 @@ ut_tmb_r_compare2 <- function (
         # Splice R parameters into parameter_template
         param_template <- attr(model_cpp, 'parameter_template')
         param_template$value[names(params)] <- params
+        param_template$random <- FALSE  # Comparing a fixed point, shouldn't be randomising anything since then par will use incorrect values
     }
 
     if (gdbsource) {
-        out_lines <- TMB::gdbsource(g3_tmb_adfun(model_cpp, param_template, compile_flags = c("-O0", "-g"), output_script = TRUE))
+        out_lines <- TMB::gdbsource(g3_tmb_adfun(model_cpp, param_template, compile_flags = c("-O0", "-g"), work_dir = work_dir, output_script = TRUE))
         if (length(grep("\\[Inferior 1 .* exited normally\\]", out_lines)) == 0) {
             writeLines(out_lines)
             stop("Model run failed")
         }
     }
 
-    model_tmb <- g3_tmb_adfun(model_cpp, param_template, compile_flags = c("-O0", "-g"))
+    model_tmb <- g3_tmb_adfun(model_cpp, param_template, work_dir = work_dir, compile_flags = c("-O0", "-g"))
 
     model_tmb_nll <- model_tmb$fn()
     model_tmb_report <- model_tmb$report()
     r_result <- model_fn(param_template)
 
-    unittest::ok(unittest::ut_cmp_equal(
-        model_tmb_nll,
-        as.vector(r_result),
-        tolerance = tolerance ), "TMB and R match nll")
-
+    val_test("nll", TMB = model_tmb_nll, R = as.vector(r_result))
     for (n in names(attributes(r_result))) {
-        unittest::ok(unittest::ut_cmp_equal(
-            dearray(model_tmb_report[[n]]),
-            dearray(attr(r_result, n)),
-            tolerance = tolerance), paste("TMB and R match", n))
+        val_test(n, TMB = dearray(model_tmb_report[[n]]), R = dearray(attr(r_result, n)))
+    }
+
+    if (test_tmb_fn) {
+        tmb_fn <- g3_tmb_fn(model_cpp, work_dir = work_dir, compile_flags = c("-O0", "-g"))
+        # NB: Either raw values or a parameter template should work, choose one at random
+        tmb_fn_report <- tmb_fn(if (stats::runif(1) < 0.5) param_template$value else param_template)
+
+        for (n in names(attributes(r_result))) {
+            val_test(n, TMBfn = dearray(model_tmb_report[[n]]), R = dearray(attr(r_result, n)))
+        }
     }
 }
 
@@ -172,7 +182,9 @@ vignette_base_dir <- function (extra) {
 
 vignette_test_output <- function (vign_name, model_code, params.out, tolerance = 1.5e-5) {
     out_base <- vignette_base_dir(vign_name)
-    writeLines(model_code, con = paste0(out_base, ".cpp"))
+    writeLines(
+        grep("// Model generated with", model_code, invert = TRUE, value = TRUE),
+        con = paste0(out_base, ".cpp") )
 
     if (!file.exists(paste0(out_base, '.params'))) {
         # Set baseline optimised params
@@ -180,14 +192,14 @@ vignette_test_output <- function (vign_name, model_code, params.out, tolerance =
         param_df <- as.data.frame(unlist(params.out$value))
         colnames(param_df) <- "value"
         param_df <- param_df[order(rownames(param_df)),,drop = F]
-        capture.output(print.data.frame(param_df, digits = 20), file = paste0(out_base, '.params'))
+        utils::capture.output(print.data.frame(param_df, digits = 20), file = paste0(out_base, '.params'))
     }
 
     model_fn <- g3_to_r(attr(model_code, "actions"))
     ut_tmb_r_compare2(
         model_fn,
         model_code,
-        params.out$value,
+        params.out,
         tolerance = tolerance )
 
     tbl <- utils::read.table(paste0(out_base, ".params"))
@@ -198,7 +210,7 @@ vignette_test_output <- function (vign_name, model_code, params.out, tolerance =
     for (n in grep('^detail_.*__(num|wgt)$', names(r), value = TRUE)) {
         unittest::ok(all(!is.na(r[[n]])), paste0(n, ": No NaN values"))
 
-        capture.output(
+        utils::capture.output(
             print(signif(drop(r[[n]]), 4), width = 1e4),
             file = paste0(out_base, '.', n))
     }

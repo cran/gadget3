@@ -1,3 +1,24 @@
+# gadget3 0.14-0:
+
+## Bug fixes
+* g3a_predate_catchability_project now correctly scales when quotas are expressed in individuals #222
+* gadget3 resistant to packages (re)defining head/tail S3 methods, e.g. reformulas #224
+* g3_param_project projections tending to zero in some cases #226
+* g3_quota_hockeyfleet not overreporting when handed multiple stocks #227
+* Allow for zero mean weight in weightjones #228 
+
+## New features
+* Add g3a_trace_var, based on g3experiments::g3a_trace_nan #231
+* Add g3a_trace_timings, for investigating relative action speed #235
+* Add g3_tmb_fn(), for projection runs & similar #237
+* Parameters can be set as type="LOG", for optimisation in logspace #251
+
+## Breaking changes
+* optimise defaults to FALSE unless default bounds are provided #233
+* Don't generate TMB ADGrad function if random effects not used #234
+* Hide g3a_initialconditions / g3a_renewal (*not* g3a_initialconditions_normalparam/cv) #240
+* g3_param_project_dlnorm() / _logar1() accept parameters in linear space, not log #251
+
 # gadget3 0.13-0:
 
 ## Bug fixes

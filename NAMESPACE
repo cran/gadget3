@@ -1,5 +1,4 @@
 importFrom("stats", "as.formula", "formula", "dnorm", "rnorm", "lag")
-importFrom("utils", "capture.output", "head", "str", "tail")
 
 # R/aaa_lang.R
 export(g3_native)
@@ -52,10 +51,8 @@ export(g3a_renewal_vonb_recl)
 export(g3a_renewal_vonb_t0)
 export(g3a_renewal_vonb)
 export(g3a_renewal_initabund)
-export(g3a_renewal)
 export(g3a_renewal_normalparam)
 export(g3a_renewal_normalcv)
-export(g3a_initialconditions)
 export(g3a_initialconditions_normalparam)
 export(g3a_initialconditions_normalcv)
 export(g3a_otherfood)
@@ -83,6 +80,10 @@ export(g3a_spmodel)
 # R/action_tagging.R
 export(g3a_predate_tagrelease)
 export(g3a_tag_shedding)
+
+# R/action_trace.R
+export(g3a_trace_var)
+export(g3a_trace_timings)
 
 # R/action_order.R
 export(g3_action_order)
@@ -148,6 +149,7 @@ export(g3_param_project_logar1)
 export(g3_param_project)
 
 # R/quota.R
+export(g3_quota_hockeystick)
 export(g3_quota_hockeyfleet)
 export(g3_quota_assess)
 export(g3_quota)
@@ -163,6 +165,7 @@ S3method(print, g3_r)
 # R/run_tmb.R
 export(g3_to_tmb)
 export(g3_tmb_adfun)
+export(g3_tmb_fn)
 S3method(edit, g3_cpp)
 S3method(print, g3_cpp)
 export(g3_tmb_par)

@@ -272,6 +272,13 @@ g3_to_r(list(
 ##     if (is.data.frame(param)) {
 ##         param_lower &lt;- structure(param$lower, names = param$switch)
 ##         param_upper &lt;- structure(param$upper, names = param$switch)
+##         logarithmic &lt;- grepl(&quot;(^|:)LOG(:|$)&quot;, param$type)
+##         param$value[logarithmic] &lt;- lapply(param[logarithmic, 
+##             &quot;value&quot;], log)
+##         param_lower[logarithmic] &lt;- lapply(param_lower[logarithmic], 
+##             log)
+##         param_upper[logarithmic] &lt;- lapply(param_upper[logarithmic], 
+##             log)
 ##         param &lt;- structure(param$value, names = param$switch)
 ##     }
 ##     else {
@@ -292,8 +299,8 @@ g3_to_r(list(
 ##         }
 ##     }
 ## }
-## &lt;bytecode: 0x56402d49be08&gt;
-## &lt;environment: 0x56402d39a1b8&gt;</code></pre>
+## &lt;bytecode: 0x559eb82a3478&gt;
+## &lt;environment: 0x559eb4cb96b8&gt;</code></pre>
 <p>The attached step gets inserted at the beginning of the model, and a
 new random number is chosen for <code>parrot</code> at each model
 timestep.</p>

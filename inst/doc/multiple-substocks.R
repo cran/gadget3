@@ -22,7 +22,7 @@ area_names <- g3_areas(c('IXa', 'IXb'))
 
 actions_time <- list(
   g3a_time(
-    1979L, 2023L,
+    1990L, 2023L,
     step_lengths = c(3L, 3L, 3L, 3L)),
   NULL)
 
@@ -30,13 +30,13 @@ actions <- c(actions, actions_time)
 
 ## -----------------------------------------------------------------------------
 # Create stock definition for fish ####################
-st_imm <- g3_stock(c(species = "fish", 'imm'), seq(5L, 25L, 5)) |>
-  g3s_livesonareas(area_names["IXa"]) |>
-  g3s_age(1L, 5L)
+st_imm <- g3_stock(c(species = "fish", 'imm'), seq(5L, 100L, 5)) |>
+  g3s_age(1L, 5L) |>
+  g3s_livesonareas(area_names["IXa"])
 
-st_mat <- g3_stock(c(species = "fish", 'mat'), seq(5L, 25L, 5)) |>
-  g3s_livesonareas(area_names["IXa"]) |>
-  g3s_age(3L, 10L)
+st_mat <- g3_stock(c(species = "fish", 'mat'), seq(5L, 100L, 5)) |>
+  g3s_age(3L, 10L) |>
+  g3s_livesonareas(area_names["IXa"])
 stocks = list(imm = st_imm, mat = st_mat)
 
 ## -----------------------------------------------------------------------------
@@ -50,7 +50,7 @@ actions_st_imm <- list(
     transition_f = ~TRUE ),
   g3a_naturalmortality(st_imm),
   g3a_initialconditions_normalcv(st_imm),
-  g3a_renewal_normalparam(st_imm),
+  g3a_renewal_normalcv(st_imm),
   g3a_age(st_imm, output_stocks = list(st_mat)),
   NULL)
 
@@ -73,14 +73,14 @@ actions <- c(actions, actions_st_imm, actions_st_mat, actions_likelihood_st)
 # Fleet data for f_surv #################################
 
 # Landings data: For each year/step/area
-expand.grid(year = 1990:1994, step = 2, area = 'IXa') |>
+expand.grid(year = 1990:2023, step = 2, area = 'IXa') |>
     # Generate a random total landings by weight
-    mutate(weight = rnorm(n(), mean = 1000, sd = 100)) |>
+    mutate(weight = rnorm(n(), mean = 1e5, sd = 10)) |>
     # Assign result to landings_f_surv
     identity() -> landings_f_surv
 
-# Length distribution data: Generate 100 random samples in each year/step/area
-expand.grid(year = 1990:1994, step = 2, area = 'IXa', length = rep(NA, 100)) |>
+# Length distribution data: Generate 1000 random samples in each year/step/area
+expand.grid(year = 1990:2023, step = 2, area = 'IXa', length = rep(NA, 1000)) |>
   # Generate random lengths for these samples
   mutate(length = rnorm(n(), mean = 50, sd = 20)) |>
   # Save unagggregated data into ldist_f_surv.raw
@@ -92,27 +92,40 @@ ldist_f_surv.raw |>
   group_by(
       year = year,
       step = step,
-      length = cut(length, breaks = c(seq(0, 80, 20), Inf), right = FALSE) ) |>
+      length = cut(length, breaks = c(seq(0, 110, 5), Inf), right = FALSE) ) |>
   # Report count in each length bin
   summarise(number = n(), .groups = 'keep') |>
   # Save into ldist_f_surv
   identity() -> ldist_f_surv
 
-# Assume 5 * 5 samples in each year/step/area
-expand.grid(year = 1990:1994, step = 2, area = 'IXa', age = rep(NA, 5), length = rep(NA, 5)) |>
-  # Generate random lengths/ages for these samples
-  mutate(length = rnorm(n(), mean = 50, sd = 20)) |>
+# Assume 100 * 100 samples in each year/step/area
+expand.grid(year = 1990:2023, step = 2, area = 'IXa', age = rep(NA, 100), length = rep(NA, 100)) |>
   # Generate random whole numbers for age
-  mutate(age = floor(runif(n(), min = 1, max = 5))) |>
+  mutate(age = floor(pmin(rnorm(n(), mean = 6, sd = 1), 10))) |>
+  # Generate random lengths for these samples
+  mutate(length = rnorm(n(), mean = 30 + age * 2, sd = 20)) |>
   # Group into length/age bins
   group_by(
       year = year,
       step = step,
       age = age,
-      length = cut(length, breaks = c(seq(0, 80, 20), Inf), right = FALSE) ) |>
+      length = cut(length, breaks = c(seq(0, 110, 5), Inf), right = FALSE) ) |>
   # Report count in each length bin
   summarise(number = n(), .groups = 'keep') ->
   aldist_f_surv
+
+# Map maturity stage data to stocks
+as.data.frame(aldist_f_surv) |>
+  # Generate random maturity stage data from age data, our stock matures between 3..5
+  mutate(maturity = age > runif(n(), 3, 5)) |>
+  # Map maturity stage to the stock name: Note we don't have to use the full stock name
+  mutate(stock = ifelse(maturity, "mat", "imm")) |>
+  # Remove redundant columns
+  mutate(age = NULL, maturity = NULL) ->
+  matp_f_surv
+
+## -----------------------------------------------------------------------------
+matp_f_surv[sample(nrow(matp_f_surv), 10),]
 
 ## -----------------------------------------------------------------------------
 # Create fleet definition for f_surv ####################
@@ -145,13 +158,22 @@ actions_likelihood_f_surv <- list(
     area_group = area_names,
     report = TRUE,
     nll_breakdown = TRUE),
+  g3l_catchdistribution(
+    "matp_f_surv",
+    obs_data = matp_f_surv,
+    fleets = list(f_surv),
+    stocks = stocks,
+    function_f = g3l_distribution_sumofsquares(),
+    area_group = area_names,
+    report = TRUE,
+    nll_breakdown = TRUE),
   NULL)
 
 actions <- c(actions, actions_f_surv, actions_likelihood_f_surv)
 
 ## -----------------------------------------------------------------------------
 suppressWarnings({  # NB: The model is incomplete, fish_imm__num isn't defined
-simple_model <- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
+simple_model <- g3_to_r(list(g3a_time(1990, 2023), g3a_predate_fleet(
     f_surv,
     stocks,
     suitabilities = g3_suitability_exponentiall50(by_stock = TRUE),
@@ -170,7 +192,7 @@ ok(ut_cmp_identical(sort(names(attr(simple_model, "parameter_template")), method
 
 ## -----------------------------------------------------------------------------
 suppressWarnings({  # NB: The model is incomplete, fish_imm__num isn't defined
-simple_model <- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
+simple_model <- g3_to_r(list(g3a_time(1990, 2023), g3a_predate_fleet(
     f_surv,
     stocks,
     suitabilities = g3_suitability_exponentiall50(by_stock = 'species'),
@@ -187,7 +209,7 @@ ok(ut_cmp_identical(sort(names(attr(simple_model, "parameter_template")), method
 
 ## -----------------------------------------------------------------------------
 suppressWarnings({  # NB: The model is incomplete, fish_imm__num isn't defined
-simple_model <- g3_to_r(list(g3a_time(1990, 1994), g3a_predate_fleet(
+simple_model <- g3_to_r(list(g3a_time(1990, 2023), g3a_predate_fleet(
     f_surv,
     stocks,
     suitabilities = g3_suitability_exponentiall50(
@@ -198,11 +220,7 @@ names(attr(simple_model, "parameter_template"))
 
 ## ----message=FALSE, echo=FALSE------------------------------------------------
 ok(ut_cmp_identical(sort(names(attr(simple_model, "parameter_template")), method = "radix"), c(
-    "fish.f_surv.l50.1990",
-    "fish.f_surv.l50.1991",
-    "fish.f_surv.l50.1992",
-    "fish.f_surv.l50.1993",
-    "fish.f_surv.l50.1994",
+    paste0("fish.f_surv.l50.", 1990:2023),
     "fish_imm.f_surv.alpha",
     "fish_mat.f_surv.alpha",
     "project_years", "retro_years",
@@ -212,7 +230,7 @@ ok(ut_cmp_identical(sort(names(attr(simple_model, "parameter_template")), method
 # Create abundance index for si_cpue ########################
 
 # Generate random data
-expand.grid(year = 1990:1994, step = 3, area = 'IXa') |>
+expand.grid(year = 1990:2023, step = 3, area = 'IXa') |>
     # Fill in a weight column with total biomass for the year/step/area combination
     mutate(weight = runif(n(), min = 10000, max = 100000)) ->
     dist_si_cpue
@@ -242,49 +260,52 @@ model_code <- g3_to_tmb(c(actions, list(
 ## -----------------------------------------------------------------------------
 # Guess l50 / linf based on stock sizes
 estimate_l50 <- g3_stock_def(st_imm, "midlen")[[length(g3_stock_def(st_imm, "midlen")) / 2]]
-estimate_linf <- max(g3_stock_def(st_imm, "midlen"))
+estimate_linf <- tail(g3_stock_def(st_imm, "midlen"), 3)[[1]]
 estimate_t0 <- g3_stock_def(st_imm, "minage") - 0.8
 
 attr(model_code, "parameter_template") |>
-  g3_init_val("*.rec|init.scalar", 10, lower = 0.001, upper = 200) |>
-  g3_init_val("*.init.#", 10, lower = 0.001, upper = 200) |>
+  g3_init_val("*.rec|init.scalar", 1000, optimise = FALSE) |>
+  g3_init_val("*.init.#", 10, lower = 0.001, upper = 10) |>
   g3_init_val("*.rec.#", 100, lower = 1e-6, upper = 1000) |>
-  g3_init_val("*.rec.sd", 5, lower = 4, upper = 20) |>
-  g3_init_val("*.M.#", 0.15, lower = 0.001, upper = 1) |>
-  g3_init_val("init.F", 0.5, lower = 0.1, upper = 1) |>
-  g3_init_val("*.Linf", estimate_linf, spread = 0.2) |>
+  g3_init_val("*.rec.proj", 0.002) |>
+  g3_init_val("*.M.#", 0.15, lower = 0.001, upper = 10) |>
+  g3_init_val("init.F", 0.5, lower = 0.1, upper = 10) |>
+  g3_init_val("*.Linf", estimate_linf, spread = 2) |>
   g3_init_val("*.K", 0.3, lower = 0.04, upper = 1.2) |>
-  g3_init_val("*.t0", estimate_t0, spread = 2) |>
+  g3_init_val("*.t0", estimate_t0, optimise = FALSE) |>
   g3_init_val("*.walpha", 0.01, optimise = FALSE) |>
   g3_init_val("*.wbeta", 3, optimise = FALSE) |>
-  g3_init_val("*.*.alpha", 0.07, lower = 0.01, upper = 0.2) |>
-  g3_init_val("*.*.l50", estimate_l50, spread = 0.25) |>
-  g3_init_val("*.bbin", 100, lower = 1e-05, upper = 1000) |>
+  g3_init_val("*.*.alpha", 0.07, lower = 0.01, upper = 1.8) |>
+  g3_init_val("*.*.l50", estimate_l50, spread = 1.5) |>
+  # Treat maturity alpha/l50 separately
+  g3_init_val("*.mat.alpha", 0.07, lower = 0.0001, upper = 1.8) |>
+  g3_init_val("*.mat.l50", estimate_l50, spread = 3.5) |>
+  g3_init_val("*.bbin", 100, lower = 1e-05, upper = 1500) |>
   identity() -> params.in
 
 ## ----eval=nzchar(Sys.getenv('G3_TEST_TMB'))-----------------------------------
-#  # Optimise model ################################
-#  obj.fn <- g3_tmb_adfun(model_code, params.in)
-#  
-#  params.out <- gadgetutils::g3_iterative(getwd(),
-#      wgts = "WGTS",
-#      model = model_code,
-#      params.in = params.in,
-#      grouping = list(
-#          fleet = c("ldist_f_surv", "aldist_f_surv"),
-#          abund = c("dist_si_cpue")),
-#      method = "BFGS",
-#      control = list(maxit = 1000, reltol = 1e-10),
-#      cv_floor = 0.05)
+# # Optimise model ################################
+# obj.fn <- g3_tmb_adfun(model_code, params.in)
+# 
+# params.out <- gadgetutils::g3_iterative(getwd(),
+#     wgts = "WGTS",
+#     model = model_code,
+#     params.in = params.in,
+#     grouping = list(
+#         fleet = c("ldist_f_surv", "aldist_f_surv", "matp_f_surv"),
+#         abund = c("dist_si_cpue")),
+#     method = "BFGS",
+#     control = list(maxit = 1000, reltol = 1e-10),
+#     cv_floor = 0.05)
 
 ## ----eval=nzchar(Sys.getenv('G3_TEST_TMB'))-----------------------------------
-#  # Generate detailed report ######################
-#  fit <- gadgetutils::g3_fit(model_code, params.out)
-#  gadgetplots::gadget_plots(fit, "figs", file_type = "html")
+# # Generate detailed report ######################
+# fit <- gadgetutils::g3_fit(model_code, params.out)
+# gadgetplots::gadget_plots(fit, "figs", file_type = "html")
 
 ## ----eval=FALSE---------------------------------------------------------------
-#  utils::browseURL("figs/model_output_figures.html")
+# utils::browseURL("figs/model_output_figures.html")
 
 ## ----echo=FALSE, eval=nzchar(Sys.getenv('G3_TEST_TMB'))-----------------------
-#  gadget3:::vignette_test_output("multiple-substocks", model_code, params.out)
+# gadget3:::vignette_test_output("multiple-substocks", model_code, params.out)
 

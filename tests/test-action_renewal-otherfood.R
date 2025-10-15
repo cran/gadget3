@@ -32,7 +32,7 @@ actions <- list(
     g3a_otherfood_normalparam(other_np),
     g3a_otherfood_normalcv(other_cv),
     g3a_age(pred_a),
-    g3a_initialconditions(pred_a, ~1e5 + 0 * pred_a__midlen, ~1000),
+    gadget3:::g3a_initialconditions_manual(pred_a, ~1e5 + 0 * pred_a__midlen, ~1000),
 
     g3a_predate(
         pred_a,
@@ -62,9 +62,8 @@ actions <- list(
         g3l_distribution_sumofsquares(),
         nll_breakdown = TRUE,
         report = TRUE ),
-
-    # NB: Dummy parameter so model will compile in TMB
-    ~{nll <- nll + g3_param("x", value = 0)} )
+    # NB: Only required for testing
+    gadget3:::g3l_test_dummy_likelihood() )
 actions <- c(actions, list(
     g3a_report_detail(actions) ))
 model_fn <- g3_to_r(actions)

@@ -82,21 +82,21 @@ ldist.lln.agg
 g3_distribution_preview(ldist.lln.agg)
 
 ## ----eval=nzchar(Sys.getenv('G3_TEST_TMB'))-----------------------------------
-#  # Import data into a temporary database
-#  library(mfdb)
-#  mdb <- mfdb(tempfile(fileext=".duckdb"))
-#  ldist.lln.raw$month <- 1
-#  ldist.lln.raw$areacell <- 'all'  # NB: We have to have an areacell mapping for MFDB
-#  mfdb_import_area(mdb, data.frame(name = c('all'), size = c(5)))
-#  mfdb_import_survey(mdb, ldist.lln.raw)
-#  
-#  # Use mfdb_sample_count to extract & group in the same manner as above
-#  ldist.lln.agg <- mfdb_sample_count(mdb, c('length'), list(
-#      year=1999:2000,
-#      length = mfdb_interval("len", seq(10, 100, by = 10)) ))[[1]]
-#  g3_distribution_preview(ldist.lln.agg, area_group = c(all=1))
-#  
-#  mfdb_disconnect(mdb)
+# # Import data into a temporary database
+# library(mfdb)
+# mdb <- mfdb(tempfile(fileext=".duckdb"))
+# ldist.lln.raw$month <- 1
+# ldist.lln.raw$areacell <- 'all'  # NB: We have to have an areacell mapping for MFDB
+# mfdb_import_area(mdb, data.frame(name = c('all'), size = c(5)))
+# mfdb_import_survey(mdb, ldist.lln.raw)
+# 
+# # Use mfdb_sample_count to extract & group in the same manner as above
+# ldist.lln.agg <- mfdb_sample_count(mdb, c('length'), list(
+#     year=1999:2000,
+#     length = mfdb_interval("len", seq(10, 100, by = 10)) ))[[1]]
+# g3_distribution_preview(ldist.lln.agg, area_group = c(all=1))
+# 
+# mfdb_disconnect(mdb)
 
 ## -----------------------------------------------------------------------------
 g3_distribution_preview(read.table(header = TRUE, text="

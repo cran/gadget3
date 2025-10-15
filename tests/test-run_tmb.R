@@ -1,3 +1,4 @@
+if (!interactive()) options(warn=2, error = function() { sink(stderr()) ; traceback(3) ; q(status = 1) })
 library(magrittr)
 library(unittest)
 
@@ -46,7 +47,7 @@ mock(TMB::compile, function (...) {
         paste0(gsub("\\\\", "/", tempdir()), ".*\\.cpp$") ), "First argument is the cpp file")
 }, {
     # NB: This should fail since there'll be no .so to load
-    tryCatch(g3_tmb_adfun(g3_to_tmb(list(~{g3_param("x")}))), error = function (e) NULL)
+    tryCatch(g3_tmb_adfun(g3_to_tmb(list(~{g3_param("x", optimise = TRUE)}))), error = function (e) NULL)
     ok(grepl("-DEIGEN_PERMANENTLY_DISABLE_STUPID_WARNINGS", last_compile_call$flags, fixed = TRUE), "compile_flags: Internal flags set")
 })
 ########## g3_tmb_adfun:compile_args
@@ -96,9 +97,9 @@ ok(ut_cmp_error({
 
 ok_group('g3_tmb_par', {
     param <- attr(g3_to_tmb(list(~{
-        g3_param('param.b')
-        g3_param_vector('param_vec')
-        g3_param('aaparam')
+        g3_param('param.b', optimise = TRUE)
+        g3_param_vector('param_vec', optimise = TRUE)
+        g3_param('aaparam', optimise = TRUE)
         g3_param('randomparam', random = TRUE)
     })), 'parameter_template')
     param$value <- I(list(
@@ -121,13 +122,16 @@ ok_group('g3_tmb_par', {
         param__b = 66,
         aaparam = 55,
         randomparam = 2)), "g3_tmb_par: randomparam visible if include_random on")
+
+    pt <- attr(g3_to_tmb(list(~g3_param('x', value = 15, lower = 10, upper = 25, type = "LOG"))), 'parameter_template')
+    ok(ut_cmp_equal(g3_tmb_par(pt), c(x = log(15)) ), "g3_tmb_par: logarithmic value converted to log-space")
 })
 
 ok_group('g3_tmb_lower', {
     param <- attr(g3_to_tmb(list(~{
-        g3_param('param.b')
-        g3_param_vector('param_vec')
-        g3_param('aaparam')
+        g3_param('param.b', optimise = TRUE)
+        g3_param_vector('param_vec', optimise = TRUE)
+        g3_param('aaparam', optimise = TRUE)
         # NB: Never visible
         g3_param('randomparam', random = TRUE)
     })), 'parameter_template')
@@ -162,13 +166,16 @@ ok_group('g3_tmb_lower', {
     ok(ut_cmp_identical(
         names(g3_tmb_par(param, include_random = FALSE)),
         names(g3_tmb_lower(param))), "g3_tmb_lower: Structure matches par after setting param.b")
+
+    pt <- attr(g3_to_tmb(list(~g3_param('x', value = 15, lower = 10, upper = 25, type = "LOG"))), 'parameter_template')
+    ok(ut_cmp_equal(g3_tmb_lower(pt), c(x = log(10)) ), "g3_tmb_lower: logarithmic value converted to log-space")
 })
 
 ok_group('g3_tmb_upper', {
     param <- attr(g3_to_tmb(list(~{
-        g3_param('param.b')
-        g3_param_vector('param_vec')
-        g3_param('aaparam')
+        g3_param('param.b', optimise = TRUE)
+        g3_param_vector('param_vec', optimise = TRUE)
+        g3_param('aaparam', optimise = TRUE)
         # NB: Never visible
         g3_param('randomparam', random = TRUE)
     })), 'parameter_template')
@@ -203,27 +210,33 @@ ok_group('g3_tmb_upper', {
     ok(ut_cmp_identical(
         names(g3_tmb_par(param, include_random = FALSE)),
         names(g3_tmb_lower(param))), "g3_tmb_lower: Structure matches par after setting param.b")
+
+    pt <- attr(g3_to_tmb(list(~g3_param('x', value = 15, lower = 10, upper = 25, type = "LOG"))), 'parameter_template')
+    ok(ut_cmp_equal(g3_tmb_upper(pt), c(x = log(25)) ), "g3_tmb_upper: logarithmic value converted to log-space")
 })
 
 ok_group('g3_tmb_parscale', {
     param <- attr(g3_to_tmb(list(~{
-        g3_param('param.lu', lower = 4, upper = 8)
-        g3_param('param.ps', parscale = 22)
+        g3_param('param.lu', lower = 4, upper = 8)  # NB: Optimise = TRUE implicitly
+        g3_param('param.ps', parscale = 22, optimise = TRUE)
         g3_param('param.lups', lower = 4, upper = 8, parscale = 44)
     })), 'parameter_template')
     ok(ut_cmp_identical(g3_tmb_parscale(param), c(
         param__lu = NA,
         param__ps = 22,
         param__lups = 44)), "We populate parscale")
+
+    pt <- attr(g3_to_tmb(list(~g3_param('x', value = 15, lower = 10, upper = 25, parscale = 44, type = "LOG"))), 'parameter_template')
+    ok(ut_cmp_equal(g3_tmb_parscale(pt), c(x = log(44)) ), "g3_tmb_parscale: logarithmic value converted to log-space")
 })
 
 ok_group('g3_tmb_relist', {
     param <- attr(g3_to_tmb(list(~{
-        g3_param('param.b')
-        g3_param_vector('param_vec')
+        g3_param('param.b', optimise = TRUE)
+        g3_param_vector('param_vec', optimise = TRUE)
         g3_param('unopt_param', optimise = FALSE)
         g3_param('randomparam', random = TRUE)
-        g3_param('aaparam')
+        g3_param('aaparam', optimise = TRUE)
     })), 'parameter_template')
     param$value <- I(list(
         aaparam = 55,
@@ -274,11 +287,14 @@ ok_group('g3_tmb_relist', {
             "unopt_param" = 95,
             "randomparam" = 2,
             "aaparam" = 550)), "g3_tmb_relist: Works without param.b set, use initial table value")
+
+    pt <- attr(g3_to_tmb(list(~g3_param('x', value = 15, lower = 10, upper = 25, parscale = 44, type = "LOG"))), 'parameter_template')
+    ok(ut_cmp_equal(g3_tmb_relist(pt, c(x = log(17))), list(x = 17) ), "g3_tmb_relist: exp'ed logarithmic values")
 })
 
 ok_group('g3_param', {
     param <- attr(g3_to_tmb(list(g3a_time(2000, 2004), ~{
-        g3_param('a')
+        g3_param('a', optimise = TRUE)
         g3_param('b', value = 4, optimise = FALSE, random = TRUE, lower = 5, upper = 10)
     })), 'parameter_template')
     ok(ut_cmp_identical(
@@ -301,7 +317,7 @@ ok_group('g3_param_table', {
     param <- attr(g3_to_tmb(list(g3a_time(2000, 2004, step_lengths = c(3,3,3,3)), ~{
         g3_param_table('pt', expand.grid(  # NB: We can use base R
             cur_year = seq(start_year, end_year),  # NB: We can use g3a_time's vars
-            cur_step = 2:3))
+            cur_step = 2:3), optimise = TRUE)
         g3_param_table('pg', expand.grid(
             cur_year = start_year,
             cur_step = 1:2), value = 4, optimise = FALSE, random = TRUE, lower = 5, upper = 10)
@@ -394,16 +410,16 @@ ok_group("g3_to_tmb: Can use random parameters without resorting to include_rand
             g3a_time(1990, 1991),
             g3l_random_dnorm("a",
                 ~g3_param('a', value=1, random=TRUE),
-                ~g3_param('mu.a', value=1),
-                ~g3_param('sigma.a', value=1), period="single"),
+                ~g3_param('mu.a', value=1, optimise = TRUE),
+                ~g3_param('sigma.a', value=1, optimse = TRUE), period="single"),
             g3l_random_dnorm("b",
                 ~g3_param('b', value=1, random=TRUE),
-                ~g3_param('mu.b', value=1),
-                ~g3_param('sigma.b', value=1), period="single"),
+                ~g3_param('mu.b', value=1, optimise = TRUE),
+                ~g3_param('sigma.b', value=1, optimise = TRUE), period="single"),
             g3l_random_dnorm("x",
                 ~x,
                 ~g3_param('a', value=1, random=TRUE) * t + g3_param('b', value=1, random=TRUE),
-                ~g3_param('sigma0', value=1), period="single" ))
+                ~g3_param('sigma0', value=1, optimise = TRUE), period="single" ))
     })
     model_fn <- g3_to_r(actions)
 
@@ -461,10 +477,10 @@ ok_group("g3_to_tmb: Can use random parameters without resorting to include_rand
         ok(!isTRUE(all.equal(
             I(value_inc_random[param_tbl[param_tbl$random, 'switch']]),
             param_tbl$value[param_tbl[param_tbl$random, 'switch']])), "value_random: Random parameters have been updated")
-        param_tbl$value <- value_inc_random
 
-        # NB: ut_tmb_r_compare will be using g3_tmb_par()
-        gadget3:::ut_tmb_r_compare(model_fn, model_tmb, param_tbl)
+        param_tbl$value <- value_inc_random
+        param_tbl$random <- FALSE
+        gadget3:::ut_tmb_r_compare2(model_fn, model_cpp, param_tbl)
     } else {
         writeLines("# skip: not compiling TMB model")
     }
@@ -506,10 +522,7 @@ actions <- list(g3a_time(1990, 1991))
 expecteds <- new.env(parent = emptyenv())
 expected_warnings_r <- c()
 expected_warnings_tmb <- c()
-params <- list(
-     retro_years = 0,
-     project_years = 0,
-     rv = 0 )
+params <- list()
 
 # Check constants can pass through cleanly
 constants_integer <- 999
@@ -633,6 +646,16 @@ actions <- c(actions, ~{
 })
 expecteds$assign_right <- assign_subset[,2,2]
 expecteds$assign_leftright <- assign_subset[4,,2]
+
+# NB: The tests for += were tripping up over calls with length < 3
+assign_nullary_fn <- g3_native(function () { return(42.9) }, cpp = '[]() -> double { return 42.9; }')
+assign_nullary_out <- 0.0
+actions <- c(actions, ~{
+    comment('assign_nullary')
+    assign_nullary_out <- assign_nullary_fn()
+    REPORT(assign_nullary_out)
+})
+expecteds$assign_nullary_out <- 42.9
 
 cmp_inf <- array(c(5, Inf), dim = c(2))
 cmp_inf_out <- array(0, dim = c(4))
@@ -941,15 +964,32 @@ expecteds$modulo_y <- 1
 sumprod_input <- runif(10)
 sumprod_sum <- 0
 sumprod_prod <- 0
+sumprod_sum_scalar <- 0
+sumprod_prod_scalar <- 0
 actions <- c(actions, ~{
     comment('sum/prod')
     sumprod_sum <- sum(sumprod_input)
     sumprod_prod <- prod(sumprod_input)
+    sumprod_sum_scalar <- sum(sumprod_input[[1]])
+    sumprod_prod_scalar <- prod(sumprod_input[[1]])
     REPORT(sumprod_sum)
     REPORT(sumprod_prod)
+    REPORT(sumprod_sum_scalar)
+    REPORT(sumprod_prod_scalar)
 })
 expecteds$sumprod_sum <- sum(sumprod_input)
 expecteds$sumprod_prod <- prod(sumprod_input)
+expecteds$sumprod_sum_scalar <- sumprod_input[[1]]
+expecteds$sumprod_prod_scalar <- sumprod_input[[1]]
+
+# g3_param(type = "LOG")
+actions <- c(actions, g3_formula({
+    comment("g3_param(type = LOG)")
+    g3_param_log_out <- g3_param("param_log", type = "LOG")
+    REPORT(g3_param_log_out)
+}, g3_param_log_out = 0.0))
+params[['param_log']] <- runif(1, 10, 20)
+expecteds$g3_param_log_out <- log(params[['param_log']])
 
 # g3_param_table()
 param_table_out <- array(rep(0, 6))
@@ -1107,44 +1147,50 @@ for (i in seq_along(actions)) {
 }
 
 nll <- 0.0
+actions <- c(actions, gadget3:::g3l_test_dummy_likelihood())
 actions[['zzzzz']] <- ~{
     comment('done')
-    nll <- nll + g3_param('rv')
     return(nll)
 }
 
 # Compile model
 model_fn <- g3_to_r(actions, trace = FALSE)
-# model_fn <- edit(model_fn)
+model_cpp <- g3_to_tmb(actions, trace = FALSE)
+
+# Plug expected params into parameter template to get defaults
+params.in <- attr(model_cpp, "parameter_template")
+params.in$value[names(params)] <- params
+
 if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-    model_cpp <- g3_to_tmb(actions, trace = FALSE)
     # model_cpp <- edit(model_cpp)
-    w <- capture_warnings(model_tmb <- g3_tmb_adfun(model_cpp, params, compile_flags = c("-O0", "-g")))$warnings
+    w <- capture_warnings(model_tmb <- g3_tmb_adfun(model_cpp, params.in, compile_flags = c("-O0", "-g")))$warnings
+    ok(length(w) > 2, "g3_tmb_adfun: Generated at least 2 warnings")
     ok(ut_cmp_identical(w, c(
-        rep("No value found in g3_param_table param_table, ifmissing not specified", 10),
+        rep("No value found in g3_param_table param_table, ifmissing not specified", length(w)),
         NULL )), "g3_tmb_adfun: Compiling generated a param_table warning")
 } else {
     writeLines("# skip: not compiling TMB model")
 }
 
 # Compare everything we've been told to compare
-result <- capture_warnings(model_fn(params))
+result <- capture_warnings(model_fn(params.in))
 # str(attributes(result), vec.len = 10000)
 for (n in ls(expecteds)) {
     ok(ut_cmp_equal(
         attr(result$rv, n),
         expecteds[[n]], tolerance = 1e-6), n)
 }
+suppressWarnings(gadget3:::ut_tmb_r_compare2(model_fn, model_cpp, params.in))
 ok(ut_cmp_identical(result$warnings, expected_warnings_r), "Warnings from R as expected")
 if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-    param_template <- attr(model_cpp, "parameter_template")
-    param_template$value <- params[param_template$switch]
-    generated_warnings <- capture_warnings(gadget3:::ut_tmb_r_compare(model_fn, model_tmb, param_template))$warnings
-    ok(ut_cmp_identical(generated_warnings, c(expected_warnings_r, expected_warnings_tmb)), "Warnings from R+TMB as expected")
+    # NB: Suppress the warnings when building the model, only look at the ones for the report
+    model_tmb <- suppressWarnings(g3_tmb_adfun(model_cpp, params.in, compile_flags = c("-O0", "-g")))
+    generated_warnings <- capture_warnings(model_tmb$report())$warnings
+    ok(ut_cmp_identical(generated_warnings, expected_warnings_tmb), "Warnings from TMB as expected")
 
-    ok(ut_cmp_equal(model_tmb$report(), model_tmb$simulate()), "$simulate: Also produces named output, as $report")
+    ok(suppressWarnings(ut_cmp_equal(model_tmb$report(), model_tmb$simulate())), "$simulate: Also produces named output, as $report")
 
-    out_simcomplete <- model_tmb$simulate(complete = TRUE)
-    ok(ut_cmp_equal(model_tmb$report(), out_simcomplete[names(model_tmb$report())]), "$simulate(complete=TRUE): Contains named output")
+    out_simcomplete <- suppressWarnings(model_tmb$simulate(complete = TRUE))
+    ok(suppressWarnings(ut_cmp_equal(model_tmb$report(), out_simcomplete[names(model_tmb$report())])), "$simulate(complete=TRUE): Contains named output")
     ok(ut_cmp_equal(model_tmb$env$data$slice_vec_set_in, out_simcomplete$slice_vec_set_in), "$simulate(complete=TRUE): Also contains data")
 }

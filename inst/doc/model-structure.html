@@ -123,7 +123,7 @@ g &lt;- get_formula(5)</code></pre>
 (not the result of cows + pigs), and has an environment attached:</p>
 <pre class="r"><code>str(f)</code></pre>
 <pre><code>## Class &#39;formula&#39;  language ~cows + pigs
-##   ..- attr(*, &quot;.Environment&quot;)=&lt;environment: 0x56402b73e1f8&gt;</code></pre>
+##   ..- attr(*, &quot;.Environment&quot;)=&lt;environment: 0x559eb502c278&gt;</code></pre>
 <p>We can look into this environment, and see the values that got set
 for cows &amp; pigs:</p>
 <pre class="r"><code>str(as.list(environment(f)))</code></pre>
@@ -154,6 +154,13 @@ an R function:</p>
 ##     if (is.data.frame(param)) {
 ##         param_lower &lt;- structure(param$lower, names = param$switch)
 ##         param_upper &lt;- structure(param$upper, names = param$switch)
+##         logarithmic &lt;- grepl(&quot;(^|:)LOG(:|$)&quot;, param$type)
+##         param$value[logarithmic] &lt;- lapply(param[logarithmic, 
+##             &quot;value&quot;], log)
+##         param_lower[logarithmic] &lt;- lapply(param_lower[logarithmic], 
+##             log)
+##         param_upper[logarithmic] &lt;- lapply(param_upper[logarithmic], 
+##             log)
 ##         param &lt;- structure(param$value, names = param$switch)
 ##     }
 ##     else {
@@ -166,11 +173,12 @@ an R function:</p>
 ##         cows + pigs
 ##     }
 ## }
-## &lt;bytecode: 0x564029f64250&gt;
-## &lt;environment: 0x564025f759f8&gt;</code></pre>
+## &lt;bytecode: 0x559eb45221b8&gt;
+## &lt;environment: 0x559eb564f298&gt;</code></pre>
 <p>…or a TMB template:</p>
 <pre class="r"><code>g3_to_tmb(list(f))</code></pre>
-<pre><code>## #include &lt;TMB.hpp&gt;
+<pre><code>## // Model generated with gadget3 0.14-0
+## #include &lt;TMB.hpp&gt;
 ## #include &lt;numeric&gt;
 ## 
 ## 
@@ -217,7 +225,7 @@ the gadget functionality is implemented.</p>
 that will count years/steps, and stop when the end of the time period is
 reached. For example:</p>
 <pre class="r"><code>g3a_time(1990, 1999)</code></pre>
-<pre><code>## $`-01`
+<pre><code>## $`-01:-                   `
 ## ~{
 ##     debug_label(&quot;g3a_time: Start of time period&quot;)
 ##     cur_time &lt;- cur_time + 1L
@@ -233,14 +241,14 @@ reached. For example:</p>
 ##     cur_step_size &lt;- step_lengths[[cur_step]]/12
 ##     cur_step_final &lt;- cur_step == step_count
 ## }
-## &lt;environment: 0x56402a55e2b8&gt;
+## &lt;environment: 0x559eb5e57e28&gt;
 ## 
 ## $`001`
 ## ~{
 ##     if (cur_time &gt; total_steps) 
 ##         return(nll)
 ## }
-## &lt;environment: 0x56402ab34d20&gt;</code></pre>
+## &lt;environment: 0x559eb4fe0770&gt;</code></pre>
 <p>Like in the example above, the definitions are part of the formula’s
 environment, and if we compile it we see our years ending up in the
 code.</p>
@@ -250,6 +258,13 @@ code.</p>
 ##     if (is.data.frame(param)) {
 ##         param_lower &lt;- structure(param$lower, names = param$switch)
 ##         param_upper &lt;- structure(param$upper, names = param$switch)
+##         logarithmic &lt;- grepl(&quot;(^|:)LOG(:|$)&quot;, param$type)
+##         param$value[logarithmic] &lt;- lapply(param[logarithmic, 
+##             &quot;value&quot;], log)
+##         param_lower[logarithmic] &lt;- lapply(param_lower[logarithmic], 
+##             log)
+##         param_upper[logarithmic] &lt;- lapply(param_upper[logarithmic], 
+##             log)
 ##         param &lt;- structure(param$value, names = param$switch)
 ##     }
 ##     else {
@@ -304,8 +319,8 @@ code.</p>
 ##         }
 ##     }
 ## }
-## &lt;bytecode: 0x56402acfe2b0&gt;
-## &lt;environment: 0x56402ac33ef8&gt;</code></pre>
+## &lt;bytecode: 0x559eb5763190&gt;
+## &lt;environment: 0x559eb51b4220&gt;</code></pre>
 <p>In this case our years have been hard-coded, but their definitions
 could themselves be formula and the end result will be added to the
 model. For example:</p>
@@ -315,6 +330,13 @@ model. For example:</p>
 ##     if (is.data.frame(param)) {
 ##         param_lower &lt;- structure(param$lower, names = param$switch)
 ##         param_upper &lt;- structure(param$upper, names = param$switch)
+##         logarithmic &lt;- grepl(&quot;(^|:)LOG(:|$)&quot;, param$type)
+##         param$value[logarithmic] &lt;- lapply(param[logarithmic, 
+##             &quot;value&quot;], log)
+##         param_lower[logarithmic] &lt;- lapply(param_lower[logarithmic], 
+##             log)
+##         param_upper[logarithmic] &lt;- lapply(param_upper[logarithmic], 
+##             log)
 ##         param &lt;- structure(param$value, names = param$switch)
 ##     }
 ##     else {
@@ -369,8 +391,8 @@ model. For example:</p>
 ##         }
 ##     }
 ## }
-## &lt;bytecode: 0x56402affc998&gt;
-## &lt;environment: 0x56402afc1c10&gt;</code></pre>
+## &lt;bytecode: 0x559eb5642fc0&gt;
+## &lt;environment: 0x559eb540afc8&gt;</code></pre>
 </div>
 <div id="stocks" class="section level2">
 <h2>Stocks</h2>
@@ -452,6 +474,13 @@ fn</code></pre>
 ##     if (is.data.frame(param)) {
 ##         param_lower &lt;- structure(param$lower, names = param$switch)
 ##         param_upper &lt;- structure(param$upper, names = param$switch)
+##         logarithmic &lt;- grepl(&quot;(^|:)LOG(:|$)&quot;, param$type)
+##         param$value[logarithmic] &lt;- lapply(param[logarithmic, 
+##             &quot;value&quot;], log)
+##         param_lower[logarithmic] &lt;- lapply(param_lower[logarithmic], 
+##             log)
+##         param_upper[logarithmic] &lt;- lapply(param_upper[logarithmic], 
+##             log)
 ##         param &lt;- structure(param$value, names = param$switch)
 ##     }
 ##     else {
@@ -598,8 +627,8 @@ fn</code></pre>
 ##         }
 ##     }
 ## }
-## &lt;bytecode: 0x56402ac8dfb8&gt;
-## &lt;environment: 0x56402b885748&gt;</code></pre>
+## &lt;bytecode: 0x559eb4a7dbb0&gt;
+## &lt;environment: 0x559eb5db7ce0&gt;</code></pre>
 <p>…you can see our provided formula have been used to calculate
 <code>ling_imm__growth_l</code> and <code>ling_imm__growth_w</code>, and
 <code>age</code> and <code>area</code> are available to us thanks to the
@@ -622,6 +651,13 @@ fn</code></pre>
 ##     if (is.data.frame(param)) {
 ##         param_lower &lt;- structure(param$lower, names = param$switch)
 ##         param_upper &lt;- structure(param$upper, names = param$switch)
+##         logarithmic &lt;- grepl(&quot;(^|:)LOG(:|$)&quot;, param$type)
+##         param$value[logarithmic] &lt;- lapply(param[logarithmic, 
+##             &quot;value&quot;], log)
+##         param_lower[logarithmic] &lt;- lapply(param_lower[logarithmic], 
+##             log)
+##         param_upper[logarithmic] &lt;- lapply(param_upper[logarithmic], 
+##             log)
 ##         param &lt;- structure(param$value, names = param$switch)
 ##     }
 ##     else {
@@ -773,8 +809,8 @@ fn</code></pre>
 ##         }
 ##     }
 ## }
-## &lt;bytecode: 0x564029580090&gt;
-## &lt;environment: 0x56402b3607d8&gt;</code></pre>
+## &lt;bytecode: 0x559eb5aa2750&gt;
+## &lt;environment: 0x559eb65047b0&gt;</code></pre>
 <p>Note that <code>custom_delta_l</code> is recalculated every loop,
 since it uses <code>area</code>, whereas <code>custom_delta_w</code> is
 calculated once for the step.</p>

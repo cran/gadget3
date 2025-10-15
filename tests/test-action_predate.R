@@ -88,34 +88,34 @@ ok_group("Detect missing suitabilities", {
         fleet_bc,
         list(prey_a, prey_b, prey_c),
         suitabilities = list(
-            prey_a = ~g3_param_vector("fleet_bc_a"),
-            prey_c = ~g3_param_vector("fleet_bc_c")),
+            prey_a = ~g3_param_vector("fleet_bc_a", value = rep(0, 10)),
+            prey_c = ~g3_param_vector("fleet_bc_c", value = rep(0, 10))),
         amount_f = ~g3_param('amount_bc') * area), "prey_b"), "Threw an error on missing suitability function")
 })
 
 actions <- list(
     g3a_time(2000, ~2000 + g3_param('years') - 1, project_years = 0),
-    g3a_initialconditions(prey_a, ~10 * prey_a__midlen, ~100 * prey_a__midlen),
-    g3a_initialconditions(prey_b, ~10 * prey_b__midlen, ~100 * prey_b__midlen),
-    g3a_initialconditions(prey_c, ~10 * prey_c__midlen, ~100 * prey_c__midlen),
+    gadget3:::g3a_initialconditions_manual(prey_a, ~10 * prey_a__midlen, ~100 * prey_a__midlen),
+    gadget3:::g3a_initialconditions_manual(prey_b, ~10 * prey_b__midlen, ~100 * prey_b__midlen),
+    gadget3:::g3a_initialconditions_manual(prey_c, ~10 * prey_c__midlen, ~100 * prey_c__midlen),
     g3a_predate_fleet(
         fleet_ab,
         # NB: Add names to ensure they don't leak into suitability report naming
         list(a = prey_a, b = prey_b, c = prey_c),
         suitabilities = list(
             # NB: 0 * stock__midlen hack to get suitability reports to work
-            prey_a = ~g3_param_vector("fleet_ab_a") + 0 * stock__midlen,
-            prey_b = ~g3_param_vector("fleet_ab_b") + 0 * stock__midlen,
-            prey_c = ~g3_param_vector("fleet_ab_c") + 0 * stock__midlen ),
+            prey_a = ~g3_param_vector("fleet_ab_a", value = rep(0, 10)) + 0 * stock__midlen,
+            prey_b = ~g3_param_vector("fleet_ab_b", value = rep(0, 10)) + 0 * stock__midlen,
+            prey_c = ~g3_param_vector("fleet_ab_c", value = rep(0, 10)) + 0 * stock__midlen ),
         catchability_f = g3a_predate_catchability_totalfleet(~g3_param('amount_ab') * area) ),
     g3a_predate_fleet(
         fleet_bc,
         list(prey_a, prey_b, prey_c),
         suitabilities = list(
             # NB: 0 * stock__midlen hack to get suitability reports to work
-            prey_a = ~g3_param_vector("fleet_bc_a") + 0 * stock__midlen,
-            prey_b = ~g3_param_vector("fleet_bc_b") + 0 * stock__midlen,
-            prey_c = ~g3_param_vector("fleet_bc_c") + 0 * stock__midlen),
+            prey_a = ~g3_param_vector("fleet_bc_a", value = rep(0, 10)) + 0 * stock__midlen,
+            prey_b = ~g3_param_vector("fleet_bc_b", value = rep(0, 10)) + 0 * stock__midlen,
+            prey_c = ~g3_param_vector("fleet_bc_c", value = rep(0, 10)) + 0 * stock__midlen),
         catchability_f = g3a_predate_catchability_totalfleet(~g3_param('amount_bc') * area),
         # NB: Only run on even years
         run_f = ~cur_year %% 2L == 0L),
@@ -123,6 +123,8 @@ actions <- list(
         list(prey_a, prey_b, prey_c),
         power_f = ~g3_param('understocking_power'),
         weight = 2),
+    # NB: Only required for testing
+    gadget3:::g3l_test_dummy_likelihood(),
     list(
         '999' = ~{
             REPORT(prey_a__num)
@@ -147,8 +149,6 @@ actions <- list(
             REPORT(prey_a_fleet_bc__cons)
             REPORT(prey_b_fleet_bc__cons)
             REPORT(prey_c_fleet_bc__cons)
-
-            REPORT(nll)  # NB: This report triggers tmb_r_compare to compare nll
         }))
 actions <- c(actions, list(g3a_report_history(actions, ".*__cons$")))
 
@@ -177,27 +177,7 @@ ok_group("g3a_predate:predstock_list", {
 
 # Compile model
 model_fn <- g3_to_r(actions, trace = FALSE)
-# model_fn <- edit(model_fn)
-if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-    params <- attr(model_fn, 'parameter_template')
-    params$fleet_ab_a <- c(0, 0, 0, 0.1, 0.2, 0.1, 0, 0, 0, 0)
-    params$fleet_ab_b <- c(0, 0, 0, 0, 0, 0.1, 0.2, 0.1, 0, 0)
-    params$fleet_ab_c <- c(0, 0, 0, 0, 0, 0, 0.1, 0.2, 0.1, 0)
-    params$amount_ab <- 100
-    params$fleet_bc_a <- c(0, 0, 0, 0, 0.1, 0.2, 0.1, 0, 0, 0)
-    params$fleet_bc_b <- c(0, 0, 0, 0, 0, 0, 0.1, 0.2, 0.1, 0)
-    params$fleet_bc_c <- c(0, 0, 0, 0, 0, 0, 0.1, 0.2, 0.1, 0)
-    params$amount_bc <- 100
-    params$understocking_power <- 2
-    params$years <- 1
-    params$x<-1.0
-
-    model_cpp <- g3_to_tmb(actions, trace = FALSE)
-    # model_cpp <- edit(model_cpp)
-    model_tmb <- g3_tmb_adfun(model_cpp, params, compile_flags = c("-O0", "-g"))
-} else {
-    writeLines("# skip: not compiling TMB model")
-}
+model_cpp <- g3_to_tmb(actions, trace = FALSE)
 
 ok_group("No overconsumption", {
     params <- attr(model_fn, 'parameter_template')
@@ -211,7 +191,6 @@ ok_group("No overconsumption", {
     params$amount_bc <- 50
     params$understocking_power <- 2
     params$years <- 1
-    params$x<-1.0
 
     result <- model_fn(params)
     r <- attributes(result)
@@ -346,11 +325,7 @@ ok_group("No overconsumption", {
         c(15.00000, 25.00000, 35.00000, 45.00000, 55.00000, 65.00000, 74.96134, 84.91237, 94.95103, 105.00000),
         tolerance = 1e-5), "prey_c__num: Taken out of circulation")
 
-    if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-        param_template <- attr(model_cpp, "parameter_template")
-        param_template$value <- params[param_template$switch]
-        gadget3:::ut_tmb_r_compare(model_fn, model_tmb, param_template)
-    }
+    gadget3:::ut_tmb_r_compare2(model_fn, model_cpp, params)
 })
 
 
@@ -366,7 +341,6 @@ ok_group("Overconsumption", {
     params$amount_bc <- 50
     params$understocking_power <- 1
     params$years <- 1
-    params$x<-1.0
 
     result <- model_fn(params)
     r <- attributes(result)
@@ -419,11 +393,7 @@ ok_group("Overconsumption", {
         c(15, 25, 35, 45, 55, 65, 74.96134, 84.91237, 94.95103, 105),
         tolerance = 1e-5), "prey_c__num: Taken out of circulation")
 
-    if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-        param_template <- attr(model_cpp, "parameter_template")
-        param_template$value <- params[param_template$switch]
-        gadget3:::ut_tmb_r_compare(model_fn, model_tmb, param_template)
-    }
+    gadget3:::ut_tmb_r_compare2(model_fn, model_cpp, params)
 })
 
 ok_group("run_f disabling", {
@@ -438,7 +408,6 @@ ok_group("run_f disabling", {
     params$amount_bc <- 10
     params$understocking_power <- 1
     params$years <- 4
-    params$x<-1.0
 
     result <- model_fn(params)
     r <- attributes(result)
@@ -464,10 +433,5 @@ ok_group("run_f disabling", {
         colSums(r$hist_prey_c_fleet_bc__cons[,area = 'c',]),
         c("2000-01" = 30, "2001-01" = 0, "2002-01" = 30, "2003-01" = 0) ), "hist_prey_c_fleet_bc__cons: Only fished on even years")
 
-    if (nzchar(Sys.getenv('G3_TEST_TMB'))) {
-        param_template <- attr(model_cpp, "parameter_template")
-        param_template$value <- params[param_template$switch]
-        model_tmb <- g3_tmb_adfun(model_cpp, param_template, compile_flags = c("-O0", "-g"))
-        gadget3:::ut_tmb_r_compare(model_fn, model_tmb, param_template)
-    }
+    gadget3:::ut_tmb_r_compare2(model_fn, model_cpp, params)
 })

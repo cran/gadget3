@@ -14,7 +14,7 @@ abund_obs <- expand.grid(
 
 actions <- list(
     g3a_time(2000, 2005, step_lengths = c(3, 3, 6), project_years = 0),
-    g3a_initialconditions(st,
+    gadget3:::g3a_initialconditions_manual(st,
         ~1e5 + 0 * st__midlen,
         ~1000 * age + 0 * st__midlen ),
     g3a_age(st),
@@ -48,8 +48,8 @@ actions <- list(
         nll_breakdown = TRUE,
         report = TRUE ),
 
-    # NB: Dummy parameter so model will compile in TMB
-    ~{nll <- nll + g3_param("x", value = 0)} )
+    # NB: Only required for testing
+    gadget3:::g3l_test_dummy_likelihood() )
 actions <- c(actions, list(
     g3a_report_detail(actions) ))
 model_fn <- g3_to_r(actions)

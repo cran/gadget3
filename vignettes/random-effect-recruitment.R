@@ -1,0 +1,160 @@
+## ----message=FALSE, echo=FALSE----------------------------------------------------------------------------------------------------------------------
+library(unittest)
+# Redirect ok() output to stderr
+options(unittest.output = stderr())
+
+library(gadget3)
+
+set.seed(123)
+
+
+## ----natural-mortality-example----------------------------------------------------------------------------------------------------------------------
+st <- g3_stock(c(species = "fish", "imm"), 1:10 * 10)
+actions <- list(
+    g3a_time(2000, 2003, c(6,6)),
+    g3a_naturalmortality(st, g3a_naturalmortality_exp(
+        g3_param_project("M", g3_param_project_dnorm()) )))
+model_cpp <- g3_to_tmb(actions)
+attr(model_cpp, "parameter_template")[,c("switch", "random", "source")]
+
+
+## ----model-setup------------------------------------------------------------------------------------------------------------------------------------
+stocks <- list(
+    imm = g3_stock(c(species = "fish", "imm"), 1:10 * 10) |> g3s_age(1, 5) )
+
+## Generate some abundnace data for ages 4 & 5, the stock should be stable, however the data is noisy
+old.seed <- mget(c(".Random.seed"), envir = globalenv(), ifnotfound = list(NULL))[[1]]
+set.seed(42)
+dist_age4 <- expand.grid(year = 2000:2030, step = 1, age = 4, number = NA)
+dist_age4$number <- rnorm(nrow(dist_age4), 1.75e7, 2e6)
+dist_age5 <- expand.grid(year = 2000:2030, step = 1, age = 5, number = NA)
+dist_age5$number <- rnorm(nrow(dist_age5), 3.75e7, 2e6)
+set.seed(old.seed)
+
+## Single stock model, using our generated data as an abundance index
+actions <- list(
+    g3a_time(2000, 2030, step_lengths = c(6,6)),
+    g3a_age(stocks$imm),
+    g3a_initialconditions_normalcv(stocks$imm),
+    g3a_naturalmortality(stocks$imm),
+    g3a_growmature(stocks$imm, g3a_grow_impl_bbinom(maxlengthgroupgrowth = 4L)),
+    g3a_renewal_normalparam(
+      stocks$imm,
+      factor_f = g3_param_project(
+        "rec",
+        g3_param_project_logar1(),
+        scale = "scalar",
+        by_stock = stocks,
+        by_step = FALSE ),
+      run_step = 1 ),
+
+    g3l_abundancedistribution(
+        "dist_older",
+        rbind(dist_age4, dist_age5),
+        stocks = stocks,
+        # NB: Fix alpha/beta, abundance should match given values absolutely
+        function_f = g3l_distribution_surveyindices_log(alpha = 0, beta = 1),
+        report = TRUE,
+        nll_breakdown = TRUE),
+    NULL )
+
+full_actions <- c(actions, list(
+    g3a_report_detail(actions),
+    g3a_report_history(actions, "__num$|__wgt$", out_prefix="dend_"),  # NB: Late reporting
+    g3l_bounds_penalty(actions),
+    NULL ))
+model_cpp <- g3_to_tmb(full_actions)
+
+
+## ----model-parameterisation-------------------------------------------------------------------------------------------------------------------------
+## Define baseline parameters / fixed-effects
+attr(model_cpp, "parameter_template") |>
+  g3_init_val("*.init.scalar", 10, optimise = FALSE) |>
+  g3_init_val("*.init.#", 10, lower = 1e1, upper = 1e8) |>
+  g3_init_val("*.M.#", 0.5, lower = 0.1, upper = 1) |>
+  g3_init_val("init.F", 0.5, lower = 0.1, upper = 10) |>
+  g3_init_val("*_imm.Linf", 144.645) |>
+  g3_init_val("*.K", 0.3, lower = 0.04, upper = 1.2) |>
+  # NB: We don't optimise here since the model defines no length/weight structure, only counts
+  g3_init_val("*.t0", -0.8, optimise = FALSE) |>
+  g3_init_val("*.walpha", 0.01, optimise = FALSE) |>
+  g3_init_val("*.wbeta", 3, optimise = FALSE) |>
+  g3_init_val("*.rec.scalar", 10, optimise = FALSE) |>
+  g3_init_val("fish_imm.rec.proj.logar1.level", value = 2e3, lower = 1e1, upper = 5e5) |>
+  g3_init_val("fish_imm.rec.proj.logar1.stddev", value = 1, lower = 1e-15, upper = 1e4) |>
+  # NB: Relative weight is important, but g3_iterative isn't handling this for you yet
+  g3_init_val("proj_logar1_fish_imm_weight.proj_logar1_rec_weight", 1e0) |>
+  identity() -> params.in
+
+
+## ----optimisation-fixed, cache=FALSE----------------------------------------------------------------------------------------------------------------
+params.in |>
+  # NB: level = init value, to be internally consistent
+  g3_init_val("*.rec.#", value = 2e3, lower = 1e1, upper = 1e6, random = FALSE) |>
+  identity() -> params.fixed
+obj.fix <- g3_tmb_adfun(model_cpp, params.fixed, silent = TRUE)
+params.fixout <- gadgetutils::g3_optim(obj.fix, params.fixed, control = list(maxit = 2000, trace = 0))
+stopifnot(attr(params.fixout, "summary")$convergence)
+
+
+## ----optimisation-random, cache=FALSE---------------------------------------------------------------------------------------------------------------
+params.in |>
+    # NB: By setting random = TRUE, any previous bounds will be cleared
+    g3_init_val("*.rec.#", value = 2e3, random = TRUE) |>
+    identity() -> params.rnd
+obj.rnd <- g3_tmb_adfun(model_cpp, params.rnd, inner.control = list(trace = 0, maxit = 1000, tol = 1e-7), silent = TRUE)
+params.rndout <- gadgetutils::g3_optim(obj.rnd, params.rnd, trace = 0)
+stopifnot(attr(params.rndout, "summary")$convergence)
+
+
+## ----params-out-------------------------------------------------------------------------------------------------------------------------------------
+print(cbind(params.fixout$value, params.rndout$value))
+
+
+## ----sdreport, eval=FALSE, echo=FALSE---------------------------------------------------------------------------------------------------------------
+# # TODO: TMB::sdreport only works with nlminb(), not g3_optim(), or optim(), but we're getting false convergence
+# obj.rndnlm <- g3_tmb_adfun(model_cpp, params.rnd, inner.control = list(trace = 0, maxit = 1000, tol = 1e-7))
+# nlmfit <- nlminb(obj.rndnlm$par, obj.rndnlm$fn, obj.rndnlm$gr, lower = g3_tmb_lower(params.rndout), upper = g3_tmb_upper(params.rnd),
+#     control = list(eval.max = 2000, iter.max = 2000, trace = 0))
+# summary(TMB::sdreport(obj.rndnlm))
+
+
+## ----single-run-function----------------------------------------------------------------------------------------------------------------------------
+fn <- g3_tmb_fn(model_cpp)
+
+
+## ----mean-abundance---------------------------------------------------------------------------------------------------------------------------------
+abund <- g3_array_agg(
+    fn(params.rndout |> g3_init_val("project_years", 40))$dend_fish_imm__num,
+    c('age', 'year'),
+    age = c(4, 5),
+    year = 2040:2060,
+    step = 1)
+print(signif(rowMeans(abund), 3))
+
+
+## ----message=FALSE, echo=FALSE----------------------------------------------------------------------------------------------------------------------
+ok(ut_cmp_equal(rowMeans(abund), c(age4 = 1.75e+07, age5 = 3.75e+07), tolerance = 2e-2), "Tolerance at equlibrium point")
+
+
+## ----proj-plot-all-years----------------------------------------------------------------------------------------------------------------------------
+r <- fn(params.rndout |> g3_init_val("project_years", 40))
+g3_array_plot(t(g3_array_agg(r$dend_fish_imm__num, c('age', 'year'))))
+
+
+## ----proj-plot-20-iters-----------------------------------------------------------------------------------------------------------------------------
+proj_iters <- do.call(cbind, lapply(1:20, function (i) {
+    r <- fn(params.rndout |> g3_init_val("project_years", 40))
+
+    # Generate report for age 4 abundance
+    proj <- t(g3_array_agg(
+        r$dend_fish_imm__num,
+        c('age', 'year'),
+        year = 2025:2060,  # NB: Skip the first years when the model is settling
+        age = 4,
+        step = 1 ))
+    dimnames(proj)[[2]] <- paste0("proj ", i)
+    return(proj)
+}))
+g3_array_plot(proj_iters)
+
