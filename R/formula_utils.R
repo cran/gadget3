@@ -127,6 +127,10 @@ call_replace <- function (f, ...) {
             # TODO: Do this using function signatures,
             #       "moo" = function (fn, arg1, arg2, ...) { ... }
             #       "moo" = function (sym) { ... }
+            if (!is.null(formals(modify_fn)$recurse)) {
+                old_modify_fn <- modify_fn
+                modify_fn <- function (f) old_modify_fn(f, recurse = function (sub_f) call_replace(sub_f, ...))
+            }
             f <- modify_fn(f)
         }
 
@@ -139,6 +143,10 @@ call_replace <- function (f, ...) {
     # NB: Use deparse() to generate useful output for, e.g. Matrix::Matrix
     modify_fn <- modify_call_fns[[deparse(f[[1]])]]
     if (length(modify_fn) > 0) {
+        if (!is.null(formals(modify_fn)$recurse)) {
+            old_modify_fn <- modify_fn
+            modify_fn <- function (f) old_modify_fn(f, recurse = function (sub_f) call_replace(sub_f, ...))
+        }
         f <- modify_fn(f)
         return(f)
     }
@@ -282,17 +290,18 @@ f_optimize <- function (f) {
                 return(f_optimize(x))
             }
             # Regular if, descend either side of expression
-            x[[2]] <- f_optimize(x[[2]])
-            x[[3]] <- f_optimize(x[[3]])
+            if (length(x) > 1) x[2] <- list(f_optimize(x[[2]]))
+            if (length(x) > 2) x[3] <- list(f_optimize(x[[3]]))
             if (length(x) > 3) {
                 if (is.call(x[[3]]) && identical(x[[3]][[1]], as.symbol("if"))) {
                     # Have to brace an inner if, otherwise it'll steal our else
                     x[[3]] <- call("{", x[[3]])  # }
                 }
-                x[[4]] <- f_optimize(x[[4]])
+                # NB: x[4] <- list(...) won't remove list item when NULL
+                x[4] <- list(f_optimize(x[[4]]))
 
                 # If else condition is empty, remove it
-                if (is_empty_brace(x[[4]])) x[[4]] <- NULL
+                if (length(x) > 3 && is_empty_brace(x[[4]])) x[[4]] <- NULL
             }
 
             # If codepaths out of if are empty, then if statement is pointless

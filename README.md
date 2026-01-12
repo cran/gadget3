@@ -20,6 +20,7 @@ This package is part of suite of tools, including:
 
 ## Publications
 
+* [Mini-CAPAM 2025 presentation on length-based processes](https://gadget-framework.github.io/publications/2025-12-11-miniCAPAM.html)
 * [WGSAM 2025 presentation introducing gadget3](https://presentations.shuttlethread.com/2025-10-09-gadget3-mice)
 * [ICES 2024 poster](https://gadget-framework.github.io/publications/2024-09-ices-asc-gadget3-evolution-of-gadget-modelling-framework.pdf)
 
@@ -35,7 +36,8 @@ You can also install the latest development version from github:
 
 ## Documentation
 
-The gadget3 documentation is [published online](https://gadget-framework.github.io/gadget3/).
+The gadget3 documentation is available at: https://gadget-framework.github.io/gadget3/
+
 To get started, read the [introductory vignette](https://gadget-framework.github.io/gadget3/articles/introduction-single-stock.html),
 which walks through the process of building a model.
 
@@ -47,7 +49,7 @@ look in the [gadget-models](https://github.com/gadget-framework/gadget-models/) 
 
 ## Development of gadget3
 
-The documentation for the latest development version is [published online](https://gadget-framework.github.io/gadget3/master/).
+The documentation for the latest development version is available at: https://gadget-framework.github.io/gadget3-master/
 
 You can install it with:
 
