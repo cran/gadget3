@@ -310,9 +310,13 @@ g3a_grow_apply <- g3_native(r = function (growth.matrix, wgt.matrix, input_num, 
     na <- dim(growth.matrix)[[1]]  # Number of length groups
     # See stockmemberfunctions.cc:121, grow.cc:25
 
+    # Need non-conforming multiplication, which requires a vector not a 1xn array
+    dim(input_num) <- NULL
+    dim(input_wgt) <- NULL
+
     # Apply matrices to stock
-    growth.matrix <- growth.matrix * as.vector(input_num)  # NB: Cant matrix-multiply with a 1xn array
-    wgt.matrix <- growth.matrix * (wgt.matrix + as.vector(input_wgt))
+    growth.matrix <- growth.matrix * input_num
+    wgt.matrix <- growth.matrix * (wgt.matrix + input_wgt)
 
     # Sum together all length group brackets for both length & weight
     growth.matrix.sum <- colSums(growth.matrix)

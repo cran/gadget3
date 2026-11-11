@@ -2,7 +2,7 @@ g3_env$dif_pmax <- g3_native(r = function(a, b, scale) {
     # https://github.com/kaskr/adcomp/issues/7#issuecomment-642559660
     logspace_add <- function(a, b) pmax(a, b) + log1p(exp(pmin(a,b) - pmax(a, b)))
 
-    b <- as.vector(b)
+    dim(b) <- NULL
     logspace_add(a * scale, b * scale) / scale
 }, cpp = '
 // Scalar templates

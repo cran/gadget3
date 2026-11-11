@@ -153,26 +153,30 @@ vector<T> __fn__(vector<T> orig_vec, vector<T> orig_amount, vector<T> new_vec, v
 }*/', depends = c('avoid_zero'))
 
 g3_env$nonconform_add <- g3_native(r = function (base_ar, extra_ar) {
-    base_ar + as.vector(extra_ar)
+    dim(extra_ar) <- NULL
+    base_ar + extra_ar
 }, cpp = '[](array<Type> base_ar, array<Type> extra_ar) -> array<Type> {
     assert(base_ar.size() % extra_ar.size() == 0);
     return base_ar + (extra_ar.replicate(base_ar.size() / extra_ar.size(), 1));
 }')
 g3_env$nonconform_mult <- g3_native(r = function (base_ar, extra_ar) {
-    base_ar * as.vector(extra_ar)
+    dim(extra_ar) <- NULL
+    base_ar * extra_ar
 }, cpp = '[](array<Type> base_ar, array<Type> extra_ar) -> array<Type> {
     assert(base_ar.size() % extra_ar.size() == 0);
     return base_ar * (extra_ar.replicate(base_ar.size() / extra_ar.size(), 1));
 }')
 g3_env$nonconform_div <- g3_native(r = function (base_ar, extra_ar) {
-    base_ar / as.vector(extra_ar)
+    dim(extra_ar) <- NULL
+    base_ar / extra_ar
 }, cpp = '[](array<Type> base_ar, array<Type> extra_ar) -> array<Type> {
     assert(base_ar.size() % extra_ar.size() == 0);
     return base_ar / (extra_ar.replicate(base_ar.size() / extra_ar.size(), 1));
 }')
 g3_env$nonconform_div_avz <- g3_native(r = function (base_ar, extra_ar) {
+    dim(extra_ar) <- NULL
     extra_ar <- ( pmax(extra_ar * 1000, 0) + log1p(exp(pmin(extra_ar * 1000, 0) - pmax(extra_ar * 1000, 0))) ) / 1000
-    base_ar / as.vector(extra_ar)
+    base_ar / extra_ar
 }, cpp = '[](array<Type> base_ar, array<Type> extra_ar) -> array<Type> {
     vector<Type> extra_vec = extra_ar.vec();
     assert(base_ar.size() % extra_ar.size() == 0);

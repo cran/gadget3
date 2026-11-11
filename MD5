@@ -1,10 +1,10 @@
-6cf297ff097f1cfdb5e2195de72f8568 *DESCRIPTION
-0829ab11ba6eb6cb23edf1ac7aab23d8 *NAMESPACE
-32aafc8f9a0532109aadca43bfc94a95 *NEWS.md
+68a7fa268d2f8ef07ab74cd89b018b48 *DESCRIPTION
+eb46c911311ea20938000515a04a21a3 *NAMESPACE
+3608eb15827c12e72f4c582db78e6dc2 *NEWS.md
 518c92046b0409a3eeea9f03e57e5a52 *R/aaa_lang.R
-890c893f881231e1539c8f87e849a2c3 *R/aab_env.R
+3b748b1c89c0a8ac161870f0b3b7d7f1 *R/aab_env.R
 82a80fcba691a0d58662db6da221bb3c *R/action_age.R
-b22619259ecebb1dc6663d14a79d25ac *R/action_grow.R
+086d4aa5f62c9f8affb8b15668d29171 *R/action_grow.R
 8911cd4f9b858a551f78ceb0cdd23fb3 *R/action_mature.R
 f90771758ddd7502392bf112b0e207b6 *R/action_migrate.R
 2b006a02c10f18dbf3a5f1c6b43cc24f *R/action_naturalmortality.R
@@ -20,7 +20,7 @@ b7a580b13f24314ed3a2ea695c8298bc *R/action_trace.R
 cecfeb0b4d4d8356338b2c0da605b5a9 *R/action_weightloss.R
 8e6341c170b8309dc5e9cf45dc7d957d *R/array_utils.R
 ddd7b49bcb15dad53f3a9309e31348c5 *R/debug_utils.R
-dc85218af2069db6e136f53170c872ea *R/env_dif.R
+11822698507301c92ddc35c788894492 *R/env_dif.R
 598050d17e1943c47f6d916501194aed *R/eval.R
 43110d3a52c61e38f3a7496f09fc2ebf *R/formula_utils.R
 615da437957c5e6fe63b9f16818452f2 *R/headtail.R
@@ -32,9 +32,9 @@ efbbf6d1cf7bf797ced177fbc8f5d496 *R/init_val.R
 4038d320c64e3f8706d30c9a4d3cfa40 *R/likelihood_sparsesample.R
 25fed056498de63dcf201203f973c0ce *R/likelihood_tagging_ckmr.R
 f4c9e4648c6fab3d0c6330f6065a9085 *R/likelihood_understocking.R
-d86bd8f90499d871c60d96b1c95497bd *R/param_project.R
+34af0451a2ae00c9c256a727f748370e *R/param_project.R
 5fb3555fe766cbf9078f561d3542e88b *R/params.R
-df2d78f1fc580669e827625178158065 *R/quota.R
+dc6c8ddfd0cfc89b229e97e3e2b4898c *R/quota.R
 32f77f21ecdbee7ae44b390a75c93ed0 *R/regression.R
 54de8f8a444c11f931d00446d9fe29dc *R/run.R
 c84eb37b608b9b43d50b50807407f707 *R/run_desc.R
@@ -59,7 +59,7 @@ b3e803b4109b81c93e3b2ba62daaeebd *inst/doc/incorporating-observation-data.Rmd
 0f824acc412dda8862603ab5497e746a *inst/doc/incorporating-observation-data.html
 9aecd17acc29608161ddb80af11df12f *inst/doc/introduction-single-stock.R
 74d4dbfb7ddcea34381a2fbf180958b0 *inst/doc/introduction-single-stock.Rmd
-00a969eff35d960ce423d4bfe587845a *inst/doc/introduction-single-stock.html
+4703b26d95569637a11382fc54ecfa87 *inst/doc/introduction-single-stock.html
 7895a78d69c8793ecec32aa1ffc7db95 *inst/doc/model-customisation.R
 d431a0a0d59694bb55424ba973e461cc *inst/doc/model-customisation.Rmd
 cf25cb80e90337b849cbf1310313d5ae *inst/doc/model-customisation.html
@@ -68,13 +68,13 @@ c71716c2f5e835884dc5a59f246c0931 *inst/doc/model-debugging.Rmd
 f963bb04f472d2e6b67347b2d3bf05b2 *inst/doc/model-debugging.html
 97fafcff2c75063e9fc2649daab424e2 *inst/doc/model-structure.R
 24f0062f576a6f123cb5adcfc80f332b *inst/doc/model-structure.Rmd
-7d285ac590491d4f47afc91834bfafb0 *inst/doc/model-structure.html
+19a3d14a1ee6abe9f1581229b4b82396 *inst/doc/model-structure.html
 ca1cdc87fed9b2c9b5d6781a70f1173f *inst/doc/multiple-substocks.R
 28b91eb4df07193b50fb3a4292246e13 *inst/doc/multiple-substocks.Rmd
 efb10c67c9a0085d0f63dc9e293ef3d7 *inst/doc/multiple-substocks.html
 9abf0abe5e33f5f85cfc80914e8c7d32 *inst/doc/writing_actions.R
 d8db0312a400fcd9f344843494fa71dd *inst/doc/writing_actions.Rmd
-b65c20d2b949d5e89e9a4d125199c39d *inst/doc/writing_actions.html
+3b5e1cb450bc76fcf771b0cd9f03bcc2 *inst/doc/writing_actions.html
 5ab5d6ece2b302261bb614794f07552e *man/aaa_lang.Rd
 8eec894523969b7fdb9370c21aceaa5b *man/aab_env.Rd
 62bbfae4fd22ddf47959d49b5a653639 *man/action_age.Rd
@@ -125,7 +125,7 @@ ffbe58edc51506e611fcee7831bd53c2 *tests/test-action_age-multiarea.R
 f599f64b5c69054d90961cce1e99575c *tests/test-action_age.R
 40db5e304bd65371a67fda32f1f21952 *tests/test-action_grow-methods.R
 441820f0930e95ab5f68fec8d03e6d99 *tests/test-action_grow-weightjones.R
-c69fa019d004ce0f609a719993885fe1 *tests/test-action_grow.R
+5016852b2f149d0de557453c6d28de00 *tests/test-action_grow.R
 ed5e0918e2a378a03da2b8c906603165 *tests/test-action_mature.R
 ad680ce1bc8a604c271647913a8f089a *tests/test-action_migrate.R
 fed6a1988d58df2cb77528dbe9acf06f *tests/test-action_naturalmortality.R
@@ -177,7 +177,7 @@ dece29f2b183b447e726d730f9c1954b *tests/test-run_tmb-reporting_enabled.R
 75ae43c20d5dde1d69b7de9b9b155bf6 *tests/test-stock_product.R
 b396cfed7439a04a40ad3248385672f6 *tests/test-stock_tag.R
 6ecd187678197ce06e05ca5dcb0403ad *tests/test-stock_time-fishingyear.R
-ca5aa3217f74118228f29336e7ce73e2 *tests/test-stock_time.R
+23e3acf86f7f4596c2d83becb52fa06c *tests/test-stock_time.R
 7a700f39e916e50cc04a4299f68aad91 *tests/test-suitability-report.R
 1cfe563b973a7cce8bcd1b4181acd680 *tests/test-suitability.R
 38e43a16d8bbf66fd6989957b88a00d5 *tests/test-timedata.R
@@ -188,4 +188,6 @@ d431a0a0d59694bb55424ba973e461cc *vignettes/model-customisation.Rmd
 c71716c2f5e835884dc5a59f246c0931 *vignettes/model-debugging.Rmd
 24f0062f576a6f123cb5adcfc80f332b *vignettes/model-structure.Rmd
 28b91eb4df07193b50fb3a4292246e13 *vignettes/multiple-substocks.Rmd
+eb8715f4876e2c87d9232a55d153c0ef *vignettes/random-effect-recruitment.R
+a153cf20cad7944917c7c8a62dddceac *vignettes/random-effect-recruitment.html
 d8db0312a400fcd9f344843494fa71dd *vignettes/writing_actions.Rmd

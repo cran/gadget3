@@ -95,7 +95,9 @@ g3_param_project_rwalk <- function (
         return(-dnorm(d.vec(), mean, stddev, 1));
     }')
     g3_param_project_rwalk <- g3_native(r = function (var, mean, stddev) {
-        var[!is.finite(var)] <- as.vector(tail(var[is.finite(var)], 1)) +
+        final_finite <- tail(var[is.finite(var)], 1)
+        dim(final_finite) <- NULL
+        var[!is.finite(var)] <- final_finite +
             cumsum(rnorm(length(var[!is.finite(var)]), mean = mean, sd = stddev))
         return(var)
     }, cpp = '[](array<Type> var, Type mean, Type stddev) -> array<Type> {

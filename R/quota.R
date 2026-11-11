@@ -39,7 +39,8 @@ g3_quota_hockeystick <- function (
         #     which doesn't work for C++ template reasons, and would likely write the new
         #     array to memory just to sum it anyway.
         environment(totalssb)$hockeystick_mult_sum <- g3_native(r = function (base_ar, extra_vec) {
-            sum(base_ar * as.vector(extra_vec))
+            dim(extra_vec) <- NULL
+            sum(base_ar * extra_vec)
         }, cpp = '[](array<Type> base_ar, vector<Type> extra_vec) -> Type {
             assert(base_ar.size() % extra_vec.size() == 0);
             return (base_ar * (extra_vec.replicate(base_ar.size() / extra_vec.size(), 1))).sum();
